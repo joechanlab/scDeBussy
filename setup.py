@@ -10,6 +10,8 @@ setup(
         'scanpy',
         'tslearn',
         'matplotlib',
-        'scipy'
+        'scipy',
+        'pygam',
+        'tqdm'
     ],
 )
