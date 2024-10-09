@@ -16,8 +16,8 @@ def create_cellrank_probability_df(adata_paths,
     for i, adata_path in enumerate(adata_paths):
         sample_name = sample_names[i]
         adata = sc.read_h5ad(adata_path)
-        if 'SCLC-A/N' in cluster_ordering:
-            adata.obs[cell_type_col] = adata.obs[cell_type_col].astype(str).replace('SCLC-[AN]', 'SCLC-A/N', regex=True)
+        if 'SCLC-AN' in cluster_ordering:
+            adata.obs[cell_type_col] = adata.obs[cell_type_col].astype(str).replace('SCLC-[AN]', 'SCLC-AN', regex=True)
         adata.obs['sample'] = sample_name
         if (not all(np.isin(cluster_ordering, adata.obs[cell_type_col].unique()))) or (not cellrank_obsm in adata.obsm.keys()):
             print(f"Skipping {sample_name} due to missing cell types")
@@ -40,8 +40,8 @@ def create_cellrank_probability_df(adata_paths,
                             var_name='macrostate',
                             value_name='probability')
             df_long['state'] = df_long['macrostate'].apply(lambda x: x.split("_")[0])
-            if 'SCLC-A/N' in cluster_ordering:
-                df_long['state'] = df_long['state'].replace('SCLC-[AN]', 'SCLC-A/N', regex=True)
+            if 'SCLC-AN' in cluster_ordering:
+                df_long['state'] = df_long['state'].replace('SCLC-[AN]', 'SCLC-AN', regex=True)
             df_long = df_long.drop('macrostate', axis=1)
             df_long = df_long.groupby(['sample', 'cell_id', 'cell_type', 'state'], observed=True).max().dropna().reset_index()
             df = df_long.pivot(index=['sample', 'cell_id', 'cell_type'], columns='state', values='probability').reset_index()

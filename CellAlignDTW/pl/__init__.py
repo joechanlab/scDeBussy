@@ -1,1 +1,1 @@
-from ._plot import plot_sigmoid_fits, plot_summary_curve
+from ._plot import plot_sigmoid_fits, plot_summary_curve, plot_gene_clusters, plot_kshape_clustering
