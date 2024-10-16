@@ -2,7 +2,7 @@ import pandas as pd
 import seaborn as sns
 from scipy.cluster.hierarchy import linkage, leaves_list
 from sklearn.preprocessing import StandardScaler
-from tslearn.clustering import KShape
+from tslearn.clustering import KShape, KernelKMeans
 from collections import defaultdict
 
 def order_categories_by_average_position(categories):
@@ -28,8 +28,10 @@ def max_idx(x, window_size):
     max_index = rolling_mean.idxmax()
     return max_index
 
-def process_gene_data(scores_df, gene_curve, cell_colors, MI_threshold=0.5, MASE_threshold=500, n_clusters=3):
-    is_filtered_genes = scores_df.gene[(scores_df.MI > MI_threshold) & (scores_df.MASE < MASE_threshold)]
+def process_gene_data(scores_df, gene_curve, cell_colors, 
+                      MI_threshold=0.5, n_clusters=3,
+                      label_orders=None, n_init=5):
+    is_filtered_genes = scores_df.gene[(scores_df.MI > MI_threshold)]
     aligned_score = gene_curve.aligned_score
     gene_curve = gene_curve.loc[:, is_filtered_genes]
     zscore_scaler = StandardScaler()
@@ -39,10 +41,8 @@ def process_gene_data(scores_df, gene_curve, cell_colors, MI_threshold=0.5, MASE
         columns=gene_curve.columns,
         index=gene_curve.index
     )
-
-    # Calculate the index of the first maximum for each row
     ks = KShape(n_clusters=n_clusters, random_state=0, 
-                verbose=True, n_init=5).fit(normalized_gene_curve.values.T)
+                verbose=True, n_init=n_init).fit(normalized_gene_curve.values.T)
     clusters = ks.labels_
 
     max_index = normalized_gene_curve.apply(lambda col: max_idx(col, 3), axis=0)
@@ -51,9 +51,11 @@ def process_gene_data(scores_df, gene_curve, cell_colors, MI_threshold=0.5, MASE
 
     labels = clusters[combined_order]
     label_ordering = order_categories_by_average_position(labels)
-    map_gene_labels = dict(zip(label_ordering, ["early", "intermediate", "late"]))
+    if label_orders is None: 
+        label_orders = range(n_clusters)
+    map_gene_labels = dict(zip(range(n_clusters), label_orders))
     category = [map_gene_labels[x] for x in labels]
-    lut = dict(zip(['early', 'intermediate', 'late'], sns.hls_palette(3, l=0.5, s=0.8)))
+    lut = dict(zip(label_orders, sns.hls_palette(len(label_orders), l=0.5, s=0.8)))
     row_colors = pd.DataFrame(category)[0].map(lut)
 
     lut = dict(zip([True, False], cell_colors), l=0.5, s=0.8)

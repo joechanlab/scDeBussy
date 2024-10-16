@@ -32,6 +32,7 @@ def plot_summary_curve(summary_df, aggregated_curve, scores, gene):
     # Plot each sample's smoothed curve
     for sample in summary_df['sample'].unique():
         sample_data = summary_df[summary_df['sample'] == sample]
+        plt.scatter(sample_data['aligned_score'], sample_data['expression'], alpha=0.1, s=0.1, label=f'{sample}')
         plt.plot(sample_data['aligned_score'], sample_data['smoothed'], alpha=0.3, label=f'{sample}')
     
     # Plot the aggregated curve
@@ -39,14 +40,14 @@ def plot_summary_curve(summary_df, aggregated_curve, scores, gene):
     
     plt.xlabel('Aligned score')
     plt.ylabel(f'{gene} z-score')
-    plt.title(f'{gene} (MI = {round(scores['MI'].iloc[0], 3)}, MASE = {round(scores['MASE'].iloc[0], 3)}, Max @ {round(scores['Max'].iloc[0], 2)} %)')
-    plt.legend()
+    plt.title(f'{gene} (MI = {round(scores['MI'].iloc[0], 3)}, Max @ {round(scores['Max'].iloc[0], 2)} %)')
+    #plt.legend()
     plt.show()
 
-def plot_kshape_clustering(sorted_gene_curve, categories):
-    plt.figure(figsize=(3, 5))
-    for i, category in enumerate(['early', 'intermediate', 'late']):
-        plt.subplot(3, 1, i + 1)
+def plot_kshape_clustering(sorted_gene_curve, categories, label_orders):
+    plt.figure(figsize=(3, 5/3*len(label_orders)))
+    for i, category in enumerate(label_orders):
+        plt.subplot(len(label_orders), 1, i + 1)
         cluster_curves = sorted_gene_curve.values[[x == category for x in categories],:]
         for xx in cluster_curves:
             plt.plot(xx.ravel(), "k-", alpha=.05)
