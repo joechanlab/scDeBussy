@@ -26,9 +26,8 @@ def gam_smooth_expression(df, genes, n_splines = 6, lam = 3):
         gc.collect()
     summary_df = pd.concat(summary_df_list, ignore_index=True)
     scores_df = pd.DataFrame(scores_list)
-    scores_df = scores_df.sort_values(by=['MI', 'Max'], ascending=[False, True])
+    scores_df = scores_df.sort_values(by=['GCV', 'AIC', 'MI', 'Max'], ascending=[True, True, False, True])
     gene_curve = pd.DataFrame(gene_curve)
-    
     return summary_df, gene_curve, scores_df
 
 def _gam_smooth_expression(df, gene, n_splines=6, lam=3):
@@ -68,10 +67,12 @@ def _gam_smooth_expression(df, gene, n_splines=6, lam=3):
     
     scores = {
         'gene': gene,
-        "Max": max_point * 100,
+        "GCV": gam.statistics_['GCV'],
+        "AIC": gam.statistics_['AIC'],
         "MI": mi_score,
+        "Max": max_point * 100
     }
-    scores.update(gam.statistics_)
+    scores.update()
     return df, aggregated_curve, scores
 
 # def _gam_smooth_expression(df, gene, n_splines=6, lam=3):
