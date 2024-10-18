@@ -2,15 +2,36 @@ import scanpy as sc
 import pandas as pd
 import numpy as np
 import anndata as ad
-from sklearn.model_selection import StratifiedShuffleSplit
 
-def remove_outliers(df, column, threshold=3):
-    z_scores = np.abs((df[column] - df[column].mean()) / df[column].std())
-    print(f'Removing {np.sum(z_scores >= threshold)} outliers...')
-    return df[z_scores < threshold]
+def calculate_composite_score(df, score_columns):
+    # Normalize the scores to be between 0 and 1
+    for col in score_columns:
+        df[col] = df[col] / df[col].max()
+    
+    # Assign weights to each cell type based on their order
+    num_scores = len(score_columns)
+    weights = [i / (num_scores - 1) for i in range(num_scores)]
+    
+    # Weighted sum of the probabilities, reflecting the transition
+    df['score'] = sum(df[col] * weight for col, weight in zip(score_columns, weights))
+    
+    return df
 
-def stratified_downsample(df, score_col, downsample_size, seed=42):
-    df['score_bins'] = pd.cut(df[score_col], bins=100)
+def remove_outliers(df, columns, threshold=3):
+    if not isinstance(columns, list):
+        columns = [columns]
+    n = df.shape[0]
+    for column in columns:
+        z_scores = np.abs((df[column] - df[column].mean()) / df[column].std())
+        df = df[z_scores < threshold]
+    if n - df.shape[0] > 0:
+        print(f'Removed {n - df.shape[0]} outliers from column {columns}...')
+    return df
+
+def stratified_downsample(df, score_cols, downsample_size, seed=42):
+    if not isinstance(score_cols, list):
+        score_cols = [score_cols]
+    df['score_bins'] = pd.cut(df[score_cols].max(axis=1), bins=100)
     bin_counts = df['score_bins'].value_counts()
     initial_samples_per_bin = downsample_size // len(bin_counts)
     df_sampled = pd.DataFrame()
@@ -65,13 +86,16 @@ def create_cellrank_probability_df(adata_paths,
             df_long = df_long.drop('macrostate', axis=1)
             df_long = df_long.groupby(['sample', 'cell_id', 'cell_type', 'state'], observed=True).max().dropna().reset_index()
             df = df_long.pivot(index=['sample', 'cell_id', 'cell_type'], columns='state', values='probability').reset_index()
-            df.loc[:, 'score'] = df.loc[:,cluster_ordering[1]] - df.loc[:,cluster_ordering[0]]
-            df = remove_outliers(df, 'score')
-            
+            df['cell_type'] = df[cluster_ordering].idxmax(axis=1)
+            df = calculate_composite_score(df, cluster_ordering)
+            label_mapping = {label: idx for idx, label in enumerate(cluster_ordering)}
+            df['numeric_label'] = df['cell_type'].map(label_mapping)
+            df = remove_outliers(df, 'score', threshold=3)
+            n = df.shape[0]
             if df.shape[0] > downsample:
                 np.random.seed(seed)
                 df = stratified_downsample(df, 'score', downsample_size=downsample, seed=seed)
-                print(f'Downsampled {sample_name} to {df.shape[0]} cells')
+                print(f'Downsampled {sample_name} from {n} to {df.shape[0]} cells')
                 
             adata_list.append(adata[df['cell_id'],:])
             df_dict[sample_name] = df

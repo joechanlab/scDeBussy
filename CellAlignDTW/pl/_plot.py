@@ -3,20 +3,21 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-from collections import Counter
 from matplotlib.colors import LogNorm
 
 def plot_sigmoid_fits(aligned_obj):
     samples = aligned_obj.df[aligned_obj.sample_col].unique()
-    fig, axes = plt.subplots(nrows=1, ncols=len(samples), figsize=(15, 5), sharey=True)
+    fig, axes = plt.subplots(nrows=1, ncols=len(samples), figsize=(15, 3), sharey=True)
     for i, sample in enumerate(samples):
         ax = axes[i]
         sample_data = aligned_obj.df[aligned_obj.df[aligned_obj.sample_col] == sample]
         x_data = sample_data[aligned_obj.score_col].values
         y_data = sample_data['numeric_label'].values
         cutoff_point = aligned_obj.cutoff_points[sample]
-        ax.scatter(x_data, y_data, label='Data', alpha=0.2)
-        ax.axvline(x=cutoff_point, color='green', linestyle='--', label=f'Cutoff at x={cutoff_point:.2f}')
+        ax.scatter(x_data, y_data, alpha=0.01)
+        for i, cutoff in enumerate(cutoff_point):
+            ax.axvline(x=cutoff, ymin=i, ymax=i+1, color='green', linestyle='--', label=f'{cutoff:.2f}')
+        ax.set_ylim(None)
         ax.set_title(f'Sample: {sample}')
         ax.set_xlabel('Score')
         if i == 0:

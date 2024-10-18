@@ -21,37 +21,42 @@ class CellAlignDTW:
 
     @staticmethod
     def constrained_sigmoid(x, x0, k):
-        # Clip the input to avoid overflow
         x_clipped = np.clip(x, -500, 500)
         return 1 / (1 + np.exp(-k * (x_clipped - x0)))
     
-    def compute_cutoff_points_sigmoid(self, df):
+    def compute_cutoff_points_sigmoid(self):
         cutoff_points = {}
-        samples = df[self.sample_col].unique()
-        label_mapping = {label: idx for idx, label in enumerate(self.cluster_ordering)}
-        df['numeric_label'] = df[self.cell_type_col].map(label_mapping)
-        for sample in samples:
-            sample_data = df[df[self.sample_col] == sample]
-            x_data = sample_data[self.score_col].values
-            y_data = sample_data['numeric_label'].values
-            initial_guess = [0, 1]
-            popt, _ = curve_fit(self.constrained_sigmoid, x_data, y_data, p0=initial_guess)
-            x0, _ = popt
-            cutoff_point = x0
-            cutoff_points[sample] = cutoff_point
+        samples = self.df[self.sample_col].unique()
+        num_cutpoints = len(self.cluster_ordering) - 1
+        for i in range(num_cutpoints):
+            for sample in samples:
+                df_cluster = self.df[np.isin(self.df['numeric_label'], [i, i+1])]
+                sample_data = df_cluster[df_cluster[self.sample_col] == sample]
+                x_data = sample_data[self.score_col].values
+                y_data = sample_data['numeric_label'].values - sample_data['numeric_label'].values.min()
+                initial_guess = [i/num_cutpoints, 10]
+                popt, _ = curve_fit(self.constrained_sigmoid, x_data, y_data, 
+                                    p0=initial_guess,
+                                    bounds=([i / num_cutpoints, -np.inf], [1, np.inf]))
+                x0, _ = popt
+                if i == 0:
+                    cutoff_points[sample] = [x0]
+                else:
+                    cutoff_points[sample].append(x0)
         self.cutoff_points = cutoff_points
         return cutoff_points
 
-    def align_with_continuous_barycenter(self, df, cutoff_points):
+    def align_with_continuous_barycenter(self):
         aligned_segments = {}
-        all_probabilities = [df[df[self.sample_col] == sample][self.score_col].to_numpy().reshape(-1, 1) for sample in df[self.sample_col].unique()]
+        all_probabilities = [self.df[self.df[self.sample_col] == sample][self.score_col].to_numpy().reshape(-1, 1) for sample in self.df[self.sample_col].unique()]
         continuous_barycenter = dtw_barycenter_averaging(all_probabilities).flatten()
         reference_cutoff_value = np.argmin(np.abs(continuous_barycenter))
         barycenter_before, barycenter_after = continuous_barycenter[:reference_cutoff_value], continuous_barycenter[reference_cutoff_value:]
 
-        for sample in df[self.sample_col].unique():
-            sample_data = df[df[self.sample_col] == sample]
-            before_cutoff, after_cutoff = sample_data[sample_data[self.score_col] < cutoff_points[sample]], sample_data[sample_data[self.score_col] >= cutoff_points[sample]]
+        for sample in self.df[self.sample_col].unique():
+            sample_data = self.df[self.df[self.sample_col] == sample]
+            cutoff_values = self.cutoff_points[sample]
+            before_cutoff, after_cutoff = sample_data[sample_data[self.score_col] < self.cutoff_points[sample]], sample_data[sample_data[self.score_col] >= self.cutoff_points[sample]]
             before_probabilities, after_probabilities = before_cutoff[self.score_col].to_numpy().reshape(-1, 1), after_cutoff[self.score_col].to_numpy().reshape(-1, 1)
 
             # Perform DTW alignment with respective segments of the barycenter
