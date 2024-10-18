@@ -14,9 +14,8 @@ class CellAlignDTW:
         self.cutoff_points = None
 
     def align(self):
-        cutoff_points = self.compute_cutoff_points_sigmoid(self.df)
-        aligned_segments, barycenter = self.align_with_continuous_barycenter(self.df, 
-                                                                             cutoff_points)
+        self.compute_cutoff_points_sigmoid()
+        aligned_segments = self.align_with_continuous_barycenter()
         self.create_aligned_dataframe(aligned_segments)
 
     @staticmethod
@@ -44,51 +43,69 @@ class CellAlignDTW:
                 else:
                     cutoff_points[sample].append(x0)
         self.cutoff_points = cutoff_points
-        return cutoff_points
+
+    @staticmethod
+    def split_by_cutpoints(lst, cutpoints):
+        segments = [[] for _ in range(len(cutpoints) + 1)]
+        for value in lst:
+            for i, cutoff in enumerate(cutpoints):
+                if value < cutoff:
+                    segments[i].append(value)
+                    break
+            else:
+                segments[-1].append(value)
+        segments = [np.array(segment) for segment in segments]
+        return segments
 
     def align_with_continuous_barycenter(self):
         aligned_segments = {}
         all_probabilities = [self.df[self.df[self.sample_col] == sample][self.score_col].to_numpy().reshape(-1, 1) for sample in self.df[self.sample_col].unique()]
         continuous_barycenter = dtw_barycenter_averaging(all_probabilities).flatten()
-        reference_cutoff_value = np.argmin(np.abs(continuous_barycenter))
-        barycenter_before, barycenter_after = continuous_barycenter[:reference_cutoff_value], continuous_barycenter[reference_cutoff_value:]
+        num_cutpoints = pd.DataFrame(self.cutoff_points).shape[0]
+        reference_cutpoints = [
+            i / (num_cutpoints + 1) for i in range(1, num_cutpoints + 1)
+        ]
+        
+        barycenter_segments = self.split_by_cutpoints(continuous_barycenter, reference_cutpoints)
 
         for sample in self.df[self.sample_col].unique():
             sample_data = self.df[self.df[self.sample_col] == sample]
-            cutoff_values = self.cutoff_points[sample]
-            before_cutoff, after_cutoff = sample_data[sample_data[self.score_col] < self.cutoff_points[sample]], sample_data[sample_data[self.score_col] >= self.cutoff_points[sample]]
-            before_probabilities, after_probabilities = before_cutoff[self.score_col].to_numpy().reshape(-1, 1), after_cutoff[self.score_col].to_numpy().reshape(-1, 1)
+            sample_cutoffs = self.cutoff_points[sample]
+            data_segments = self.split_by_cutpoints(sample_data[self.score_col].to_numpy(), sample_cutoffs)
 
-            # Perform DTW alignment with respective segments of the barycenter
-            path_before, _ = dtw_path(before_probabilities, barycenter_before)
-            path_after, _ = dtw_path(after_probabilities, barycenter_after)
+            # Align each segment with its corresponding barycenter segment
+            aligned_sample_segments = []
+            for data_segment, barycenter_segment in zip(data_segments, barycenter_segments):
+                data_segment_reshaped = data_segment.reshape(-1, 1)
+                
+                path, _ = dtw_path(data_segment_reshaped, barycenter_segment.reshape(-1, 1))
+
+                original_indices = [sample_data.index[i] for i, _ in path]
+                aligned_values = [barycenter_segment[j] for _, j in path]
+
+                aligned_sample_segments.append({
+                    "original_indices": original_indices,
+                    "aligned_score": aligned_values
+                })
+
+            aligned_segments[sample] = aligned_sample_segments
         
-            # Extract original indices and aligned probabilities
-            before_indices, after_indices = [before_cutoff.index[i] for i, _ in path_before], [after_cutoff.index[i] for i, _ in path_after] # input index
-            aligned_before_values, aligned_after_values = [barycenter_before[j] for _, j in path_before], [barycenter_after[j] for _, j in path_after] # reference score
-
-            aligned_segments[sample] = {
-                "before": {"original_indices": before_indices, "aligned_score": aligned_before_values},
-                "after": {"original_indices": after_indices,"aligned_score": aligned_after_values}
-            }
-        return aligned_segments, (barycenter_before, barycenter_after)
+        return aligned_segments
 
     def create_aligned_dataframe(self, aligned_segments):
         data = {
             "sample": [],
             "original_index": [],
-            "aligned_score": [],
-            "segment": []
+            "aligned_score": []
         }
         
         for sample, segments in aligned_segments.items():
-            for segment_name in ["before", "after"]:
-                original_indices = segments[segment_name]["original_indices"]
-                aligned_values = segments[segment_name]["aligned_score"]
+            for segment in segments:
+                original_indices = segment["original_indices"]
+                aligned_values = segment["aligned_score"]
                 data["sample"].extend([sample] * len(original_indices))
                 data["original_index"].extend(original_indices)
                 data["aligned_score"].extend(aligned_values)
-                data["segment"].extend([segment_name] * len(original_indices))
         aligned_df = pd.DataFrame(data).drop_duplicates(subset='original_index')
         aligned_df = aligned_df.merge(self.df.reset_index(names="original_index"), 
                                       on=['original_index', 'sample'])

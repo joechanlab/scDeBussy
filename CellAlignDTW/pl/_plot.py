@@ -16,7 +16,7 @@ def plot_sigmoid_fits(aligned_obj):
         cutoff_point = aligned_obj.cutoff_points[sample]
         ax.scatter(x_data, y_data, alpha=0.01)
         for i, cutoff in enumerate(cutoff_point):
-            ax.axvline(x=cutoff, ymin=i, ymax=i+1, color='green', linestyle='--', label=f'{cutoff:.2f}')
+            ax.axvline(x=cutoff, color='green', linestyle='--', label=f'{cutoff:.2f}')
         ax.set_ylim(None)
         ax.set_title(f'Sample: {sample}')
         ax.set_xlabel('Score')
