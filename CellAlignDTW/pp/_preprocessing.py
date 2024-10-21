@@ -4,17 +4,15 @@ import numpy as np
 import anndata as ad
 
 def calculate_composite_score(df, score_columns):
-    # Normalize the scores to be between 0 and 1
-    for col in score_columns:
-        df[col] = df[col] / df[col].max()
-    
+    # normalize each row to 1
+    df[score_columns] = df[score_columns].div(df[score_columns].sum(axis=1), axis=0)
     # Assign weights to each cell type based on their order
     num_scores = len(score_columns)
     weights = [i / (num_scores - 1) for i in range(num_scores)]
     
     # Weighted sum of the probabilities, reflecting the transition
     df['score'] = sum(df[col] * weight for col, weight in zip(score_columns, weights))
-    
+    print(np.min(df['score']), np.max(df['score']), np.median(df['score']))
     return df
 
 def remove_outliers(df, columns, threshold=3):
@@ -31,7 +29,7 @@ def remove_outliers(df, columns, threshold=3):
 def stratified_downsample(df, score_cols, downsample_size, seed=42):
     if not isinstance(score_cols, list):
         score_cols = [score_cols]
-    df['score_bins'] = pd.cut(df[score_cols].max(axis=1), bins=100)
+    df['score_bins'] = pd.cut(df[score_cols].max(axis=1), bins=len(score_cols))
     bin_counts = df['score_bins'].value_counts()
     initial_samples_per_bin = downsample_size // len(bin_counts)
     df_sampled = pd.DataFrame()
@@ -47,6 +45,20 @@ def stratified_downsample(df, score_cols, downsample_size, seed=42):
     df_sampled.drop(columns='score_bins', inplace=True)
     
     return df_sampled
+
+def denoise_cell_type(df, cluster_ordering, original_assignments, threshold=0.1):
+    # Iterate over each row to assign cell types
+    for index, row in df.iterrows():
+        # Sort probabilities in descending order
+        sorted_probs = row[cluster_ordering].sort_values(ascending=False)
+        # Check if the top two probabilities are close
+        if (sorted_probs.iloc[0] - sorted_probs.iloc[1]) < threshold:
+            # Trust original assignment if values are close
+            df.at[index, 'cell_type'] = original_assignments[index]
+        else:
+            # Assign based on maximum probability
+            df.at[index, 'cell_type'] = sorted_probs.idxmax()
+    return df
 
 def create_cellrank_probability_df(adata_paths, 
                                    cell_type_col,
@@ -90,13 +102,12 @@ def create_cellrank_probability_df(adata_paths,
             df = calculate_composite_score(df, cluster_ordering)
             label_mapping = {label: idx for idx, label in enumerate(cluster_ordering)}
             df['numeric_label'] = df['cell_type'].map(label_mapping)
-            df = remove_outliers(df, 'score', threshold=3)
+            #df = remove_outliers(df, 'score', threshold=3)
             n = df.shape[0]
             if df.shape[0] > downsample:
                 np.random.seed(seed)
                 df = stratified_downsample(df, 'score', downsample_size=downsample, seed=seed)
                 print(f'Downsampled {sample_name} from {n} to {df.shape[0]} cells')
-                
             adata_list.append(adata[df['cell_id'],:])
             df_dict[sample_name] = df
     score_df = pd.concat(df_dict, axis=0)
