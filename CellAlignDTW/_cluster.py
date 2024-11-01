@@ -28,7 +28,25 @@ def max_idx(x, window_size):
     max_index = rolling_mean.idxmax()
     return max_index
 
-def process_gene_data(scores_df, gene_curve, cell_colors, 
+def categorize_values(X, Y):
+    result = []
+    
+    for x in X:
+        # Initialize category index
+        category = 0
+        
+        # Find the appropriate category for x
+        for i, cutoff in enumerate(Y):
+            if x < cutoff:
+                break
+            category = i + 1
+        
+        result.append(category)
+    
+    return pd.Series(result)
+
+
+def process_gene_data(scores_df, gene_curve, cell_colors, cutoff_points,
                       MI_threshold=0.5, n_clusters=3,
                       label_orders=None, n_init=5):
     is_filtered_genes = scores_df.gene[(scores_df.MI > MI_threshold)]
@@ -58,8 +76,7 @@ def process_gene_data(scores_df, gene_curve, cell_colors,
     lut = dict(zip(label_orders, sns.hls_palette(len(label_orders), l=0.5, s=0.8)))
     row_colors = pd.DataFrame(category)[0].map(lut)
 
-    lut = dict(zip([True, False], cell_colors), l=0.5, s=0.8)
-    
-    col_cols = (aligned_score < 0).map(lut)
+    lut = dict(zip(range(len(cell_colors)), cell_colors), l=0.5, s=0.8)
+    col_cols = (categorize_values(aligned_score, cutoff_points)).map(lut)
 
     return sorted_gene_curve, row_colors, col_cols, category
