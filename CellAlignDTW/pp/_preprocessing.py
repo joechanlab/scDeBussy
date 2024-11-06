@@ -119,4 +119,4 @@ def create_cellrank_probability_df(adata_paths,
     gene_df = gene_df.reset_index(names='cell_id')
     df = score_df.merge(gene_df, on = ['cell_id'])
     df = df.sort_values(['sample', 'score'])
-    return df
+    return combined_adata, df
