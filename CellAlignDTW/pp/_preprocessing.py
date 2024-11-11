@@ -12,7 +12,6 @@ def calculate_composite_score(df, score_columns):
     
     # Weighted sum of the probabilities, reflecting the transition
     df['score'] = sum(df[col] * weight for col, weight in zip(score_columns, weights))
-    print(np.min(df['score']), np.max(df['score']), np.median(df['score']))
     return df
 
 def remove_outliers(df, columns, threshold=3):
@@ -66,7 +65,7 @@ def create_cellrank_probability_df(adata_paths,
                                    cellrank_cols_dict, 
                                    cluster_ordering,
                                    cellrank_obsm='term_states_fwd_memberships',
-                                   downsample=5000,
+                                   downsample=np.Inf,
                                    seed=42):
     df_dict = {}
     adata_list = []
