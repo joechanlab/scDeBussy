@@ -2,10 +2,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import itertools
+from sklearn.neighbors import KernelDensity
+import matplotlib.colors as mcolors
 from matplotlib.colors import LogNorm
+from matplotlib.colors import LinearSegmentedColormap
+import PyComplexHeatmap as pch
 
 def plot_sigmoid_fits(aligned_obj):
     samples = aligned_obj.df[aligned_obj.sample_col].unique()
@@ -80,13 +82,15 @@ def plot_summary_curve(summary_df, aggregated_curve, scores, genes, fig_size=(2,
     plt.show()
 
 
-def plot_kshape_clustering(sorted_gene_curve, categories, label_orders):
+def plot_kshape_clustering(sorted_gene_curve, categories, label_orders=None, alpha=0.05):
+    if label_orders is None:
+        label_orders = sorted(set(categories))
     plt.figure(figsize=(2, 5/3*len(label_orders)))
     for i, category in enumerate(label_orders):
         plt.subplot(len(label_orders), 1, i + 1)
         cluster_curves = sorted_gene_curve.values[[x == category for x in categories],:]
         for xx in cluster_curves:
-            plt.plot(xx.ravel(), "k-", alpha=.05)
+            plt.plot(xx.ravel(), "k-", alpha=alpha)
         centroid = np.mean(cluster_curves, axis=0)
         plt.plot(centroid.ravel(), "r-", linewidth=1.5, label='Centroid')
         #plt.text(0.36, 0.1, category, transform=plt.gca().transAxes)
@@ -98,70 +102,113 @@ def plot_kshape_clustering(sorted_gene_curve, categories, label_orders):
     plt.tight_layout()
     plt.show()
 
-def shuffle_genes(sorted_gene_curve, row_colors, display_genes, min_distance):
+def fit_kde(sorted_gene_curve, df, cell_types, bandwidth=50):
+    gene_density = pd.DataFrame(index=sorted_gene_curve.index)
+    for cell_type in cell_types:
+        is_cell_type_gene = (df == cell_type).astype(int)
+        x = np.arange(len(is_cell_type_gene)).reshape(-1, 1)
+        kde = KernelDensity(bandwidth=bandwidth, kernel='gaussian')
+        kde.fit(x, sample_weight=is_cell_type_gene)
+
+        # Evaluate the density model on a grid
+        x_d = np.linspace(0, len(is_cell_type_gene)-1, len(is_cell_type_gene)).reshape(-1, 1)
+        log_density = kde.score_samples(x_d)
+        gene_density[cell_type] = np.exp(log_density)
+    return gene_density
+
+
+def plot_kde_density(density):
+    for cell_type, density_values in density.items():
+        plt.plot(density.index, density_values, label=cell_type)
+        plt.fill_between(density.index, density_values, alpha=0.5)
+    plt.title(cell_type)
+    plt.xticks([])
+    plt.xlabel('Index')
+    plt.ylabel('Density')
+    plt.legend()
+    plt.show()
+
+
+def plot_kde_heatmap(cluster_colors, cell_types, cell_type_colors, sorted_gene_curve, df_left, density=None, left_annotation_columns=None, save_path=None):
     """
-    Rearranges the rows of sorted_gene_curve so that any two genes in display_genes are at least min_distance apart,
-    while ensuring that genes are only rearranged within their respective row_colors groups.
+    Function to plot a KDE heatmap using PyComplexHeatmap.
 
     Parameters:
-    sorted_gene_curve (DataFrame): DataFrame with gene expression data.
-    row_colors (list): List of colors for each row in sorted_gene_curve.
-    display_genes (list of str): List of genes to display on the y-axis.
-    min_distance (int): Minimum distance between any two display genes.
-
-    Returns:
-    DataFrame: Rearranged DataFrame with shuffled gene rows.
-    list: Rearranged row colors corresponding to the shuffled gene rows.
+    - cluster_colors: Dictionary of cluster names to colors.
+    - cell_types: List or array-like of cell types.
+    - cell_type_colors: Dictionary of cell type names to colors.
+    - density: DataFrame containing density information for different cell types.
+    - sorted_gene_curve: DataFrame or array-like containing the gene expression data to plot.
+    - df_left: DataFrame or array-like for left annotations (e.g., groupings).
+    - output_file: Path to save the output heatmap image (default is "heatmap.png").
     """
+
+    # Define custom colormaps for Early, Middle, and Late groups
+    cmap = {'early': LinearSegmentedColormap.from_list("custom_cmap", ["#FFFFFF", cluster_colors['Early']]),
+            'middle': LinearSegmentedColormap.from_list("custom_cmap", ["#FFFFFF", cluster_colors['Middle']]),
+            'late': LinearSegmentedColormap.from_list("custom_cmap", ["#FFFFFF", cluster_colors['Late']])}
+
+    # Create column annotation (top)
+    col_ha = pch.HeatmapAnnotation(
+        label=pch.anno_label(cell_types, merge=True, extend=True, rotation=0,
+                             colors=cell_type_colors, adjust_color=True, luminance=0.75, relpos=(0,0)),
+        Group=pch.anno_simple(cell_types, colors=cell_type_colors),
+        verbose=1, axis=1, plot_legend=False, label_kws=dict(visible=False)
+    )
+
+    # Create left annotation
+    if density is not None:
+        left_annotations = {}
+        for name, col_name, cmap_name in left_annotation_columns:
+            if col_name in density.columns:
+                left_annotations[name] = pch.anno_simple(density.loc[:, col_name], cmap=cmap[cmap_name], height=4)
+        left_ha = pch.HeatmapAnnotation(
+            **left_annotations,
+            verbose=1,
+            axis=0,
+            plot_legend=False,
+            label_kws=dict(visible=True, rotation=90, horizontalalignment='left', verticalalignment='center')
+        )
+    else:
+        left_ha = None
+
+    # Create right annotation
+    right_ha = pch.HeatmapAnnotation(
+        Group=pch.anno_simple(df_left, colors=cluster_colors),
+        verbose=1, axis=0, plot_legend=True,
+        label_kws=dict(visible=False)
+    )
+
+    # Plot the heatmap using PyComplexHeatmap's ClusterMapPlotter
+    plt.figure(figsize=(4, 8))
     
-    # Get a list of all genes
-    all_genes = sorted_gene_curve.index.tolist()
+    heatmap_plotter = pch.ClusterMapPlotter(
+        data=sorted_gene_curve,
+        top_annotation=col_ha,
+        left_annotation=left_ha,
+        right_annotation=right_ha,
+        legend_gap=7,
+        legend_hpad=-10,
+        row_cluster=False,
+        col_cluster=False,
+        row_split_gap=1,
+        cmap='Spectral_r',  # Use a colormap of your choice (e.g., 'viridis', 'parula')
+        vmin=-2,
+        vmax=2
+    )
 
-    # Create a dictionary to group genes by their row colors
-    color_to_genes = {}
-    color_to_row_colors = {}
+    if save_path is not None:
+        plt.savefig(save_path, bbox_inches='tight')
 
-    for gene, color in zip(all_genes, row_colors):
-        if color not in color_to_genes:
-            color_to_genes[color] = []
-            color_to_row_colors[color] = []
-        color_to_genes[color].append(gene)
-        color_to_row_colors[color].append(color)
-
-    # Rearrange each color group separately
-    new_order = []
-    new_row_colors = []
-
-    for color, genes in color_to_genes.items():
-        # Separate display and non-display genes within this color group
-        display_in_group = [gene for gene in genes if gene in display_genes]
-        non_display_in_group = [gene for gene in genes if gene not in display_genes]
-
-        # Start with non-display genes
-        new_group_order = non_display_in_group.copy()
-
-        # Insert display genes ensuring they are at least min_distance apart within this group
-        for i, gene in enumerate(display_in_group):
-            insert_pos = i * (min_distance + 1)
-            if insert_pos < len(new_group_order):
-                new_group_order.insert(insert_pos, gene)
-            else:
-                new_group_order.append(gene)
-
-        # Add the rearranged group to the final order
-        new_order.extend(new_group_order)
-        new_row_colors.extend([color] * len(new_group_order))
-
-    # Create a new DataFrame with shuffled rows and corresponding row colors
-    shuffled_df = sorted_gene_curve.loc[new_order]
-
-    return shuffled_df, new_row_colors
-
+    # Show the plot
+    plt.show()
 
 def plot_gene_clusters(sorted_gene_curve, row_colors, col_cols, cluster_ordering, 
-                       display_genes=None, min_distance=20, yticklabels=True, labelsize=8, tick_width=0.01, figsize=(4, 8), save_path=None): 
+                       display_genes=None, yticklabels=True, labelsize=8, tick_width=0.01, figsize=(4, 8), save_path=None): 
     """
     Plots a heatmap with optional gene labeling on the y-axis.
+    Dynamically adjusts y positions of labels to prevent overlap by lowering them if they are too close.
+    Shifts x position to the right every two consecutive overlaps.
 
     Parameters:
     sorted_gene_curve (DataFrame): DataFrame with gene expression data.
@@ -174,9 +221,7 @@ def plot_gene_clusters(sorted_gene_curve, row_colors, col_cols, cluster_ordering
     figsize (tuple): Size of the figure.
     save_path (str): Path to save the figure. If None, the figure is not saved.
     """
-    if display_genes is not None:
-        sorted_gene_curve, row_colors = shuffle_genes(sorted_gene_curve, row_colors, display_genes, min_distance)
-
+    
     # Create clustermap
     g = sns.clustermap(
         sorted_gene_curve,
@@ -195,10 +240,40 @@ def plot_gene_clusters(sorted_gene_curve, row_colors, col_cols, cluster_ordering
     # Get current y-tick labels (which are gene names)
     current_labels = g.ax_heatmap.get_yticklabels()
 
-    # If display_genes is provided, modify y-tick labels
+    # If display_genes is provided, modify y-tick labels and adjust their positions
     if display_genes is not None:
         # Create a list of new labels: keep gene name if it's in display_genes, otherwise set it to an empty string
         new_labels = [label.get_text() if label.get_text() in display_genes else '' for label in current_labels]
+        # Get current y-tick positions
+        yticks = g.ax_heatmap.get_yticks()
+        display_positions = [(i, yticks[i]) for i, label in enumerate(current_labels) if label.get_text() in display_genes]
+        display_positions.sort(key=lambda x: x[1])
+        
+        # Minimum distance threshold between labels on the y-axis
+        min_distance = 10
+        
+        # Track consecutive overlaps and shift amount for x position
+        overlap_count = 0
+        shift_amount_x = 0.19  # Amount to shift right after every two overlaps
+        
+        # Loop through each display gene and adjust its position if necessary
+        for i in range(1, len(display_positions)):
+            current_index, current_y = display_positions[i]
+            prev_index, prev_y = display_positions[i - 1]
+            closest_gene = min(display_positions[:i], key=lambda x: abs(x[1] - current_y))
+            # If the current label is too close to the previous one in terms of y-position
+            if (abs(current_y - prev_y) < min_distance) or (abs(closest_gene[1] - current_y) < min_distance):
+                overlap_count += 1
+                new_x_position = current_labels[current_index].get_position()[0] + shift_amount_x * (overlap_count % 6)
+                print(f"Shifting X Position: {new_x_position}")
+                current_labels[current_index].set_position((new_x_position, current_y))
+            else:
+                # check for the closest genes previous to the current gene
+                overlap_count = 0
+                
+        for label in current_labels:
+            label.set_ha('left')  # Align horizontally to the left
+        # Apply new tick labels after adjusting positions
         g.ax_heatmap.set_yticklabels(new_labels)
 
     # Set y-axis tick label size and make ticks thinner
@@ -209,6 +284,7 @@ def plot_gene_clusters(sorted_gene_curve, row_colors, col_cols, cluster_ordering
     g.ax_heatmap.set_xlabel(cluster_ordering.replace("_", "->"))
 
     plt.tight_layout()  # Automatically adjust subplots to fit into figure area
+    
     # Save figure if save_path is provided
     if save_path:
         plt.savefig(save_path, bbox_inches='tight', pad_inches=0, dpi=300)
