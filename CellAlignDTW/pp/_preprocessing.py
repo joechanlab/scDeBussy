@@ -75,30 +75,45 @@ def create_cellrank_probability_df(adata_paths,
         if 'SCLC-AN' in cluster_ordering:
             adata.obs[cell_type_col] = adata.obs[cell_type_col].astype(str).replace('SCLC-[AN]', 'SCLC-AN', regex=True)
         adata.obs['sample'] = sample_name
-        if (not all(np.isin(cluster_ordering, adata.obs[cell_type_col].unique()))) or (not cellrank_obsm in adata.obsm.keys()):
+        if (not all(np.isin(cluster_ordering, adata.obs[cell_type_col].unique()))) or ((not cellrank_obsm in adata.obsm.keys()) and (not cellrank_obsm in adata.obs.keys())):
             print(f"Skipping {sample_name} due to missing cell types")
             continue
         else: 
             print(f"Processing {sample_name}")
-            adata = adata[np.isin(adata.obs[cell_type_col], cluster_ordering),:]
-            df = pd.DataFrame(adata.obsm[cellrank_obsm],
-                            columns=cellrank_cols_dict[sample_name],
-                            index=adata.obs_names)
-            df['sample'] = sample_name
-            df['cell_id'] = adata.obs_names
-            df['cell_type'] = adata.obs[cell_type_col].astype(str)
-            df_long = pd.melt(df, 
-                            id_vars=['sample', 'cell_id', 'cell_type'], 
-                            var_name='macrostate',
-                            value_name='probability')
-            df_long['state'] = df_long['macrostate'].apply(lambda x: x.split("_")[0])
-            if 'SCLC-AN' in cluster_ordering:
-                df_long['state'] = df_long['state'].replace('SCLC-[AN]', 'SCLC-AN', regex=True)
-            df_long = df_long.drop('macrostate', axis=1)
-            df_long = df_long.groupby(['sample', 'cell_id', 'cell_type', 'state'], observed=True).max().dropna().reset_index()
-            df = df_long.pivot(index=['sample', 'cell_id', 'cell_type'], columns='state', values='probability').reset_index()
-            df['cell_type'] = df[cluster_ordering].idxmax(axis=1)
-            df = calculate_composite_score(df, cluster_ordering)
+            adata = adata[np.isin(adata.obs[cell_type_col], cluster_ordering),:].copy()
+            if cellrank_obsm == 'term_states_fwd_memberships':
+                df = pd.DataFrame(adata.obsm[cellrank_obsm],
+                                columns=cellrank_cols_dict[sample_name],
+                                index=adata.obs_names)
+                df['sample'] = sample_name
+                df['cell_id'] = adata.obs_names
+                df['cell_type'] = adata.obs[cell_type_col].astype(str)
+                df_long = pd.melt(df, 
+                                id_vars=['sample', 'cell_id', 'cell_type'], 
+                                var_name='macrostate',
+                                value_name='probability')
+                df_long['state'] = df_long['macrostate'].apply(lambda x: x.split("_")[0])
+                if 'SCLC-AN' in cluster_ordering:
+                    df_long['state'] = df_long['state'].replace('SCLC-[AN]', 'SCLC-AN', regex=True)
+                df_long = df_long.drop('macrostate', axis=1)
+                df_long = df_long.groupby(['sample', 'cell_id', 'cell_type', 'state'], observed=True).max().dropna().reset_index()
+                df = df_long.pivot(index=['sample', 'cell_id', 'cell_type'], columns='state', values='probability').reset_index()
+                df['cell_type'] = df[cluster_ordering].idxmax(axis=1)
+                df = df.loc[np.isin(df['cell_type'], cluster_ordering),:]
+                adata = adata[np.isin(adata.obs_names, df.cell_id),:].copy()
+                df_cell_type = pd.DataFrame({'cell_type': df.cell_type.values}, index=df.cell_id)
+                df_cell_type = df_cell_type.loc[adata.obs_names]
+                adata.obs['cell_type_corrected'] = df_cell_type.cell_type.values
+                df = calculate_composite_score(df, cluster_ordering)
+
+            elif cellrank_obsm == 'palantir_pseudotime_slalom':
+                df = pd.DataFrame(adata.obs[cellrank_obsm].values,
+                    columns=['score'],
+                    index=adata.obs_names)
+                df['sample'] = sample_name
+                df['cell_id'] = adata.obs_names
+                df['cell_type'] = adata.obs[cell_type_col].astype(str)
+
             label_mapping = {label: idx for idx, label in enumerate(cluster_ordering)}
             df['numeric_label'] = df['cell_type'].map(label_mapping)
             #df = remove_outliers(df, 'score', threshold=3)
