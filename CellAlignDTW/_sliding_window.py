@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from scipy.spatial.distance import cdist
 from gseapy import enrichr
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -96,3 +97,46 @@ def analyze_and_plot_enrichment(results_df, p_threshold=1e-4, or_threshold=5, ex
     pivot_df_lor_sorted = calculate_max_position(pivot_df_lor)
     print(num_significant)  # Print the number of significant gene sets
     plot_heatmap(pivot_df_lor_sorted)
+
+
+def rbf_kernel(x, y, gamma):
+    return np.exp(-gamma * cdist(x[:, None], y[:, None], 'sqeuclidean'))
+
+def sliding_window_enrichment(gene_list, gene_set, window_size, gamma, step_size=1):  # Added step_size parameter
+    # Binary encoding
+    binary_vector = np.array([1 if gene in gene_set else 0 for gene in gene_list])
+    n = len(gene_list)
+
+    # Compute kernel matrix
+    positions = np.arange(n)
+    kernel_matrix = rbf_kernel(positions, positions, gamma)
+
+    # Sliding window convolution
+    enrichment_signal = np.zeros(n)
+    half_window = window_size // 2
+    for i in range(0, n, step_size):  # Updated loop to use step_size
+        start = max(0, i - half_window)
+        end = min(n, i + half_window + 1)
+        enrichment_signal[i] = np.sum(kernel_matrix[i, start:end] * binary_vector[start:end])
+
+    # Create DataFrame with start positions and enrichment signals
+    result_df = pd.DataFrame({
+        'start_position': np.arange(0, n, step_size),
+        'enrichment_signal': enrichment_signal[::step_size]  # Take every step_size-th value
+    })
+
+    return result_df
+
+def permutation_test(enrichment_signal, gene_list, gene_set, num_permutations=1000):
+    observed_max = np.max(enrichment_signal)
+
+    # Permutation test
+    permuted_max_values = []
+    for _ in range(num_permutations):
+        permuted_list = np.random.permutation(gene_list)
+        permuted_signal = sliding_window_enrichment(permuted_list, gene_set, len(enrichment_signal), gamma=1)
+        permuted_max_values.append(np.max(permuted_signal))
+
+    # Calculate p-value
+    p_value = np.mean(np.array(permuted_max_values) > observed_max)
+    return p_value
