@@ -105,7 +105,7 @@ def plot_kshape_clustering(sorted_gene_curve, categories, label_orders=None, alp
 def fit_kde(sorted_gene_curve, df, cell_types, bandwidth=50):
     gene_density = pd.DataFrame(index=sorted_gene_curve.index)
     for cell_type in cell_types:
-        is_cell_type_gene = (df == cell_type).astype(int)
+        is_cell_type_gene = (np.isin(df, cell_type)).astype(int)
         x = np.arange(len(is_cell_type_gene)).reshape(-1, 1)
         kde = KernelDensity(bandwidth=bandwidth, kernel='gaussian')
         kde.fit(x, sample_weight=is_cell_type_gene)
@@ -117,19 +117,49 @@ def fit_kde(sorted_gene_curve, df, cell_types, bandwidth=50):
     return gene_density
 
 
-def plot_kde_density(density):
+def plot_kde_density(density, title="", clusters=None, cluster_colors=None, name_map=None):
+    fig, ax = plt.subplots(2, 1, figsize=(5, 3), gridspec_kw={'height_ratios': [3, 0.1], 'hspace': 0})
+    if name_map is not None:
+        density.columns = density.columns.map(name_map)
+    # Plot KDE density
     for cell_type, density_values in density.items():
-        plt.plot(density.index, density_values, label=cell_type)
-        plt.fill_between(density.index, density_values, alpha=0.5)
-    plt.title(cell_type)
-    plt.xticks([])
-    plt.xlabel('Index')
-    plt.ylabel('Density')
-    plt.legend()
+        ax[0].plot(density.index, density_values, label=cell_type)
+        ax[0].fill_between(density.index, density_values, alpha=0.5)
+    
+    ax[0].legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize='small', frameon=False)
+    ax[0].set_title(title)
+    ax[0].set_yticks([])
+    ax[0].set_xticks([])
+    ax[0].set_xlabel('')
+    ax[0].set_ylabel('Density', fontsize=15)
+
+    # Add bar plot for cell type annotations
+    if clusters is not None:
+        unique_clusters = list(set(clusters))
+        color_map = cluster_colors
+        for i, cluster in enumerate(unique_clusters):
+            subset = density.index[clusters == cluster]
+            ax[1].bar(subset, height=0.5, bottom=-0.5, width=1, 
+                      color=cluster_colors[cluster], align='edge', alpha=1)
+        
+        # Add legend for cell types
+        handles = [plt.Line2D([0], [0], color=color_map[ct], lw=4) for ct in unique_clusters]
+        labels = unique_clusters
+        ax[1].legend(handles, labels, loc='center left', bbox_to_anchor=(1, 0.5), fontsize='small', frameon=False)
+        
+        ax[1].set_yticks([])
+        ax[1].set_xticks([])
+        for spine in ax[0].spines.values():
+            spine.set_visible(False)
+        for spine in ax[1].spines.values():
+            spine.set_visible(False)
+        ax[1].set_xlabel('Genes', fontsize=15)
+    
+    plt.tight_layout()
     plt.show()
 
 
-def plot_kde_heatmap(cluster_colors, cell_types, cell_type_colors, sorted_gene_curve, df_left, density=None, left_annotation_columns=None, save_path=None):
+def plot_kde_heatmap(cluster_colors, cell_types, cell_type_colors, sorted_gene_curve, df_left, density=None, figsize=(4, 8), left_annotation_columns=None, vmin=-3, vmax=3, save_path=None):
     """
     Function to plot a KDE heatmap using PyComplexHeatmap.
 
@@ -180,7 +210,7 @@ def plot_kde_heatmap(cluster_colors, cell_types, cell_type_colors, sorted_gene_c
     )
 
     # Plot the heatmap using PyComplexHeatmap's ClusterMapPlotter
-    plt.figure(figsize=(4, 8))
+    plt.figure(figsize=figsize)
     
     heatmap_plotter = pch.ClusterMapPlotter(
         data=sorted_gene_curve,
@@ -193,8 +223,8 @@ def plot_kde_heatmap(cluster_colors, cell_types, cell_type_colors, sorted_gene_c
         col_cluster=False,
         row_split_gap=1,
         cmap='Spectral_r',  # Use a colormap of your choice (e.g., 'viridis', 'parula')
-        vmin=-2,
-        vmax=2
+        vmin=vmin,
+        vmax=vmax
     )
 
     if save_path is not None:
