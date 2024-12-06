@@ -127,16 +127,184 @@ def sliding_window_enrichment(gene_list, gene_set, window_size, gamma, step_size
 
     return result_df
 
-def permutation_test(enrichment_signal, gene_list, gene_set, num_permutations=1000):
-    observed_max = np.max(enrichment_signal)
 
-    # Permutation test
+def permutation_test_with_nes(enrichment_signal, gene_list, gene_set, window_size, step_size, gamma, num_permutations=1000):
+    """
+    Perform a permutation test to calculate a normalized enrichment score (NES).
+
+    Parameters:
+        enrichment_signal (np.array): Observed enrichment signal.
+        gene_list (list): Ordered list of genes.
+        gene_set (set): Set of genes to test for enrichment.
+        num_permutations (int): Number of permutations to perform.
+
+    Returns:
+        nes (float): Normalized enrichment score.
+        p_value (float): P-value for the observed enrichment.
+    """
+    # Calculate observed maximum enrichment score
+    observed_max = np.max(enrichment_signal.enrichment_signal)
+    #print(observed_max)
+
+    # Generate null distribution by permuting the gene list
     permuted_max_values = []
     for _ in range(num_permutations):
+        # Permute the gene list
         permuted_list = np.random.permutation(gene_list)
-        permuted_signal = sliding_window_enrichment(permuted_list, gene_set, len(enrichment_signal), gamma=1)
-        permuted_max_values.append(np.max(permuted_signal))
+        
+        # Simulate enrichment signal using convolution or other smoothing method
+        permuted_signal = sliding_window_enrichment(permuted_list, gene_set, window_size, gamma, step_size)
+        
+        # Record maximum value from permuted signal
+        permuted_max_values.append(np.max(permuted_signal.enrichment_signal))
+
+    # Convert null distribution to numpy array
+    permuted_max_values = np.array(permuted_max_values)
+    #print(permuted_max_values)
+    # Calculate mean and standard deviation of null distribution
+    null_mean = np.mean(permuted_max_values)
+    null_std = np.std(permuted_max_values)
+
+    # Handle edge case where null_std is zero
+    if null_std == 0:
+        nes = 0  # Assign NES as 0 if there's no variability in permutations
+    else:
+        # Calculate normalized enrichment score (NES)
+        nes = (observed_max - null_mean) / null_std
 
     # Calculate p-value
-    p_value = np.mean(np.array(permuted_max_values) > observed_max)
-    return p_value
+    p_value = np.mean(permuted_max_values >= observed_max)
+
+    return nes, p_value
+
+
+def benjamini_hochberg(p_values, alpha=0.05):
+    """
+    Perform Benjamini-Hochberg FDR correction on a list of p-values.
+
+    Parameters:
+        p_values (list or np.array): List of p-values to correct.
+        alpha (float): Desired FDR level (default is 0.05).
+
+    Returns:
+        np.array: Array of adjusted p-values (q-values).
+    """
+    p_values = np.array(p_values)
+    n = len(p_values)
+    sorted_indices = np.argsort(p_values)
+    sorted_p_values = p_values[sorted_indices]
+
+    # Calculate the Benjamini-Hochberg critical values
+    bh_critical_values = (np.arange(1, n + 1) / n) * alpha
+
+    # Adjust p-values
+    adjusted_p_values = np.zeros(n)
+    for i in range(n):
+        adjusted_p_values[i] = min(1, sorted_p_values[i] * n / (i + 1))
+
+    # Ensure monotonicity of adjusted p-values
+    for i in range(n - 2, -1, -1):
+        adjusted_p_values[i] = min(adjusted_p_values[i], adjusted_p_values[i + 1])
+
+    # Return adjusted p-values in original order
+    return adjusted_p_values[np.argsort(sorted_indices)]
+
+def compute_enrichment_signals(gene_set_keys, gene_list, gene_set_dict, window_size=250, gamma=0.01, step_size=5, use_fdr=False, alpha=0.05):
+    """
+    Compute enrichment signals for multiple gene sets with optional FDR correction.
+
+    Parameters:
+        gene_set_keys (list): List of keys identifying the gene sets in the dictionary.
+        gene_list (list): Ordered list of genes.
+        gene_set_dict (dict): Dictionary containing gene sets.
+        window_size (int): Size of the sliding window (default: 250).
+        gamma (float): Kernel parameter for smoothing (default: 0.05).
+        step_size (int): Step size for sliding window (default: 20).
+        use_fdr (bool): Whether to apply FDR correction to p-values (default: False).
+        alpha (float): Significance level for FDR correction (default: 0.05).
+
+    Returns:
+        results (list of dicts): A list of results containing NES, raw p-value, and optionally FDR-adjusted q-value for each gene set.
+    """
+    results = []
+    raw_p_values = []
+
+    # Process each gene set key
+    for gene_set_key in gene_set_keys:
+        # Extract the gene set
+        gene_set = gene_set_dict[gene_set_key]
+
+        # Compute enrichment signal
+        enrichment_signal = sliding_window_enrichment(gene_list, gene_set, window_size, gamma, step_size)
+
+        # Perform statistical test
+        nes, p_value = permutation_test_with_nes(enrichment_signal, gene_list, gene_set, window_size, step_size, gamma)
+        
+        # Print NES and raw p-value
+        print(f"Gene Set: {gene_set_key}, NES: {nes}, P-value: {p_value}")
+
+        # Store intermediate results
+        results.append({
+            'gene_set_key': gene_set_key,
+            'NES': nes,
+            'p_value': p_value,
+            'q_value': None,  # Placeholder for q-value
+            'enrichment_signal': enrichment_signal  # Store signal for plotting
+        })
+        
+        # Collect raw p-values for FDR correction
+        raw_p_values.append(p_value)
+
+    # Apply FDR correction if requested
+    if use_fdr:
+        q_values = benjamini_hochberg(raw_p_values, alpha=alpha)
+        
+        # Update results with q-values
+        for i in range(len(results)):
+            results[i]['q_value'] = q_values[i]
+            print(f"Gene Set: {results[i]['gene_set_key']}, Q-value (FDR-adjusted): {q_values[i]}")
+
+    return results
+
+def plot_enrichment_signals(results, gene_list, gene_set_dict, subset_gene_set_keys=None):
+    """
+    Plot enrichment signals for a subset of gene sets from the computation results.
+
+    Parameters:
+        results (list of dicts): A list of results containing NES, p-values, q-values, and enrichment signals.
+        subset_gene_set_keys (list or None): Subset of gene set keys to plot. If None, plot all available results.
+
+    Returns:
+        None
+    """
+    # Filter results based on subset_gene_set_keys if provided
+    if subset_gene_set_keys is not None:
+        results_to_plot = [res for res in results if res['gene_set_key'] in subset_gene_set_keys]
+    else:
+        results_to_plot = results
+
+    # Plot each result
+    for result in results_to_plot:
+        enrichment_signal = result['enrichment_signal']
+        
+        binary_vector = np.array([1 if gene in gene_set_dict[result['gene_set_key']] else 0 for gene in gene_list])
+
+        plt.figure(figsize=(6, 4))
+        
+        plt.subplot(2, 1, 1)  # Create a subplot for the binary vector
+        plt.plot(binary_vector)
+        plt.title(f'Binary Vector ({result["gene_set_key"]})')
+
+        plt.subplot(2, 1, 2)  # Create a subplot for the enrichment signal
+        plt.plot(enrichment_signal['start_position'], enrichment_signal['enrichment_signal'])
+        plt.title('Enrichment Signal')
+        
+        # Add NES and p-value to the plot
+        plt.text(0.3, 0.8, f'NES: {result["NES"]:.4f}', ha='center', va='center', transform=plt.gca().transAxes)
+        plt.text(0.3, 0.7, f'P-value: {result["p_value"]:.4f}', ha='center', va='center', transform=plt.gca().transAxes)
+        
+        if result['q_value'] is not None:
+            plt.text(0.3, 0.6, f'Q-value: {result["q_value"]:.4f}', ha='center', va='center', transform=plt.gca().transAxes)
+        
+        plt.tight_layout()
+        plt.show()
