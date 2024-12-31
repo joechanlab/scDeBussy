@@ -110,16 +110,18 @@ def _mm_assignment(X, Y, barycenter, weights, metric_params=None):
     n = X.shape[0]
     cost = 0.
     list_p_k = []
-    list_y_k = []  # Store Y alignments
+    list_y_k = []
+    dtw_paths = []
+
     for i in range(n):
         path, dist_i = dtw_path(barycenter, X[i], **metric_params)
         cost += dist_i ** 2 * weights[i]
         list_p_k.append(path)
-        # Store corresponding Y values for this path
+        dtw_paths.append(path)
         y_aligned = [(i, path_point[1]) for path_point in path]
         list_y_k.append(y_aligned)
     cost /= weights.sum()
-    return list_p_k, list_y_k, cost
+    return list_p_k, list_y_k, cost, dtw_paths
 
 def _mm_update_barycenter_with_categories(X, Y, diag_sum_v_k, list_w_k, list_y_k,
                                     weights, tie_strategy='first', verbose=False):
@@ -163,6 +165,64 @@ def _mm_update_barycenter_with_categories(X, Y, diag_sum_v_k, list_w_k, list_y_k
                 categories[t] = category 
             
     return barycenter, categories
+
+def dtw_barycenter_averaging_with_categories_one_init(X, Y, barycenter_size=None,
+                                                     init_barycenter=None,
+                                                     max_iter=30, tol=1e-5, 
+                                                     weights=None,
+                                                     metric_params=None,
+                                                     tie_strategy='first',
+                                                     verbose=False):
+    """Single initialization version of DBA with categories"""
+    X_ = to_time_series_dataset(X)
+    if barycenter_size is None:
+        barycenter_size = X_.shape[1]
+    weights = _set_weights(weights, X_.shape[0])
+    if init_barycenter is None:
+        barycenter = dba._init_avg(X_, barycenter_size)
+    else:
+        barycenter_size = init_barycenter.shape[0]
+        barycenter = init_barycenter
+        
+    cost_prev, cost = np.inf, np.inf
+    categories = None
+    final_dtw_paths = None
+    
+    for it in range(max_iter):
+        # Modified to include Y in the assignment
+        list_p_k, list_y_k, cost, dtw_paths = _mm_assignment(X_, Y, barycenter, weights, 
+                                                 metric_params)
+        diag_sum_v_k, list_w_k = dba._mm_valence_warping(list_p_k, barycenter_size,
+                                                     weights)
+        if verbose:
+            print("[DBA] epoch %d, cost: %.3f" % (it + 1, cost))
+            
+        # Update both barycenter and categories
+        barycenter, categories = _mm_update_barycenter_with_categories(
+            X_, Y, diag_sum_v_k, list_w_k, list_y_k, weights=weights, tie_strategy=tie_strategy, verbose=verbose
+        )
+        
+        if abs(cost_prev - cost) < tol:
+            final_dtw_paths = dtw_paths
+            break
+        elif cost_prev < cost:
+            warnings.warn("DBA loss is increasing while it should not be. "
+                        "Stopping optimization.", ConvergenceWarning)
+            final_dtw_paths = dtw_paths
+            break
+        else:
+            cost_prev = cost
+            final_dtw_paths = dtw_paths
+    # Create aligned barycenter values for each series
+    aligned_barycenters = []
+    for path in final_dtw_paths:
+        # Extract barycenter indices from the path
+        barycenter_indices = [p[0] for p in path]
+        # Get aligned barycenter values
+        aligned_barycenter = barycenter[barycenter_indices]
+        aligned_barycenters.append(aligned_barycenter)
+            
+    return barycenter, categories, cost, aligned_barycenters
 
 def dtw_barycenter_averaging_with_categories(X, Y, barycenter_size=None, 
                                            init_barycenter=None, max_iter=30, 
@@ -238,7 +298,7 @@ def dtw_barycenter_averaging_with_categories(X, Y, barycenter_size=None,
     for i in range(n_init):
         if verbose:
             print("Attempt {}".format(i + 1))
-        bary, cats, loss = dtw_barycenter_averaging_with_categories_one_init(
+        bary, cats, loss, aligned_bary = dtw_barycenter_averaging_with_categories_one_init(
             X=X,
             Y=Y_numeric,
             barycenter_size=barycenter_size,
@@ -254,55 +314,9 @@ def dtw_barycenter_averaging_with_categories(X, Y, barycenter_size=None,
             best_cost = loss
             best_barycenter = bary
             best_categories = cats
+            best_aligned_barycenters = aligned_bary
     
     if label_encoder is not None:
         best_categories = label_encoder.inverse_transform(best_categories)
 
-    return best_barycenter, best_categories
-
-
-def dtw_barycenter_averaging_with_categories_one_init(X, Y, barycenter_size=None,
-                                                     init_barycenter=None,
-                                                     max_iter=30, tol=1e-5, 
-                                                     weights=None,
-                                                     metric_params=None,
-                                                     tie_strategy='first',
-                                                     verbose=False):
-    """Single initialization version of DBA with categories"""
-    X_ = to_time_series_dataset(X)
-    if barycenter_size is None:
-        barycenter_size = X_.shape[1]
-    weights = _set_weights(weights, X_.shape[0])
-    if init_barycenter is None:
-        barycenter = dba._init_avg(X_, barycenter_size)
-    else:
-        barycenter_size = init_barycenter.shape[0]
-        barycenter = init_barycenter
-        
-    cost_prev, cost = np.inf, np.inf
-    categories = None
-    
-    for it in range(max_iter):
-        # Modified to include Y in the assignment
-        list_p_k, list_y_k, cost = _mm_assignment(X_, Y, barycenter, weights, 
-                                                 metric_params)
-        diag_sum_v_k, list_w_k = dba._mm_valence_warping(list_p_k, barycenter_size,
-                                                     weights)
-        if verbose:
-            print("[DBA] epoch %d, cost: %.3f" % (it + 1, cost))
-            
-        # Update both barycenter and categories
-        barycenter, categories = _mm_update_barycenter_with_categories(
-            X_, Y, diag_sum_v_k, list_w_k, list_y_k, weights=weights, tie_strategy=tie_strategy, verbose=verbose
-        )
-        
-        if abs(cost_prev - cost) < tol:
-            break
-        elif cost_prev < cost:
-            warnings.warn("DBA loss is increasing while it should not be. "
-                        "Stopping optimization.", ConvergenceWarning)
-            break
-        else:
-            cost_prev = cost
-            
-    return barycenter, categories, cost
+    return best_barycenter, best_categories, best_aligned_barycenters
