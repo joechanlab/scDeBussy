@@ -1,8 +1,27 @@
 import numpy as np
 import pandas as pd
+from sklearn.cluster import KMeans
+from sklearn.mixture import GaussianMixture
+import scipy.stats as stats
+from scipy.optimize import brentq
 from tslearn.metrics import dtw_path
-from tslearn.barycenters import dtw_barycenter_averaging
 from scipy.optimize import curve_fit
+from ._dba import dtw_barycenter_averaging_with_categories
+
+def split_by_cutpoints(df, cutpoints, score_col):
+    segments = [[] for _ in range(len(cutpoints) + 1)]
+    
+    for _, row in df.iterrows():
+        value = row[score_col]
+        for i, cutoff in enumerate(cutpoints):
+            if value < cutoff:
+                segments[i].append(row)
+                break
+        else:
+            segments[-1].append(row)
+    
+    segments = [pd.DataFrame(segment) for segment in segments]
+    return segments
 
 class CellAlignDTW:
     def __init__(self, df, cluster_ordering, sample_col, score_col, cell_id_col, cell_type_col):
@@ -13,68 +32,84 @@ class CellAlignDTW:
         self.cell_id_col = cell_id_col
         self.cell_type_col = cell_type_col
         self.cutoff_points = None
+        self.label_mapping = {label: idx for idx, label in enumerate(cluster_ordering)}
+        self.df['numeric_label'] = self.df[cell_type_col].map(self.label_mapping)
 
     def align(self):
-        self.compute_cutoff_points_sigmoid()
+        self.compute_cutoff_points_kmeans()
         aligned_segments = self.align_with_continuous_barycenter()
         self.create_aligned_dataframe(aligned_segments)
 
-    @staticmethod
-    def constrained_sigmoid(x, x0, k):
-        x_clipped = np.clip(x, -500, 500)
-        return 1 / (1 + np.exp(-k * (x_clipped - x0)))
-    
-    def compute_cutoff_points_sigmoid(self):
+    def compute_cutoff_points_kmeans(self):
         cutoff_points = {}
         samples = self.df[self.sample_col].unique()
-        num_cutpoints = len(self.cluster_ordering) - 1
-        for i in range(num_cutpoints):
-            for sample in samples:
-                df_cluster = self.df[np.isin(self.df['numeric_label'], [i, i+1])]
-                sample_data = df_cluster[df_cluster[self.sample_col] == sample]
-                x_data = sample_data[self.score_col].values
-                y_data = sample_data['numeric_label'].values - i
-                initial_guess = [i/num_cutpoints, 1]
-                popt, _ = curve_fit(self.constrained_sigmoid, x_data, y_data, 
-                                    p0=initial_guess,
-                                    bounds=([i / num_cutpoints, -np.inf], [1, np.inf]))
-                x0, _ = popt
-                if i == 0:
-                    cutoff_points[sample] = [x0]
-                else:
-                    cutoff_points[sample].append(x0)
+        num_clusters = len(self.cluster_ordering)
+        
+        for sample in samples:
+            sample_data = self.df[self.df[self.sample_col] == sample]
+            X = np.column_stack([
+                sample_data[self.score_col].values,
+                sample_data['numeric_label'].values
+            ])
+            
+            # Fit GMM instead of KMeans
+            gmm = GaussianMixture(n_components=num_clusters, random_state=42)
+            gmm.fit(X)
+            
+            # Sort components by their means
+            means = gmm.means_[:, 0]  # Get means of the score dimension
+            sorted_indices = np.argsort(means)
+            
+            # Calculate intersection points between adjacent Gaussians
+            cutoffs = []
+            for i in range(len(sorted_indices)-1):
+                idx1, idx2 = sorted_indices[i], sorted_indices[i+1]
+                mu1, sigma1 = means[idx1], np.sqrt(gmm.covariances_[idx1][0,0])
+                mu2, sigma2 = means[idx2], np.sqrt(gmm.covariances_[idx2][0,0])
+                
+                # Find intersection point of the two Gaussians
+                def gaussian_diff(x):
+                    return (stats.norm.pdf(x, mu1, sigma1) * gmm.weights_[idx1] - 
+                        stats.norm.pdf(x, mu2, sigma2) * gmm.weights_[idx2])
+                
+                # Search for zero crossing between the means
+                cutoff = brentq(gaussian_diff, mu1, mu2)
+                cutoffs.append(cutoff)
+            
+            cutoff_points[sample] = cutoffs
+        
         self.cutoff_points = cutoff_points
-
-    @staticmethod
-    def split_by_cutpoints(df, cutpoints, score_col):
-        segments = [[] for _ in range(len(cutpoints) + 1)]
-        
-        for _, row in df.iterrows():
-            value = row[score_col]
-            for i, cutoff in enumerate(cutpoints):
-                if value < cutoff:
-                    segments[i].append(row)
-                    break
-            else:
-                segments[-1].append(row)
-        
-        segments = [pd.DataFrame(segment) for segment in segments]
-        return segments
+        print(cutoff_points)
 
     def align_with_continuous_barycenter(self):
         aligned_segments = {}
         all_probabilities = [self.df[self.df[self.sample_col] == sample][self.score_col].to_numpy().reshape(-1, 1) for sample in self.df[self.sample_col].unique()]
-        continuous_barycenter = dtw_barycenter_averaging(all_probabilities,
-                                                        metric_params={'global_constraint':"sakoe_chiba", 'sakoe_chiba_radius': 1}).flatten()
-        num_cutpoints = pd.DataFrame(self.cutoff_points).shape[0]
-        all_cutoffs = np.array([self.cutoff_points[sample] for sample in self.df[self.sample_col].unique()])
-        reference_cutpoints = all_cutoffs.mean(axis = 0)
-        barycenter_segments = self.split_by_cutpoints(pd.DataFrame({self.score_col: continuous_barycenter}), reference_cutpoints, self.score_col)
+        all_cell_types = np.array([self.df[self.df[self.sample_col] == sample][self.cell_type_col].tolist() for sample in self.df[self.sample_col].unique()])
+        continuous_barycenter, barycenter_categories, _  = dtw_barycenter_averaging_with_categories(all_probabilities, all_cell_types,
+                                                        metric_params={'global_constraint':"sakoe_chiba", 'sakoe_chiba_radius': 1})
+        continuous_barycenter = continuous_barycenter.flatten()
+        barycenter_categories = [self.label_mapping[x] for x in barycenter_categories]
+        
+        X = np.column_stack([
+        continuous_barycenter,
+        barycenter_categories
+        ])
+        
+        kmeans = KMeans(n_clusters=len(self.cluster_ordering), random_state=42)
+        kmeans.fit(X)
+        
+        # Sort centers by x-coordinate and calculate midpoints
+        centers = sorted(kmeans.cluster_centers_, key=lambda x: x[0])
+        reference_cutpoints = [(centers[i][0] + centers[i+1][0])/2 for i in range(len(centers)-1)]
+        
+        print("Reference cutpoints:", reference_cutpoints)
+
+        barycenter_segments = split_by_cutpoints(pd.DataFrame({self.score_col: continuous_barycenter}), reference_cutpoints, self.score_col)
 
         for sample in self.df[self.sample_col].unique():
             sample_data = self.df[self.df[self.sample_col] == sample]
             sample_cutoffs = self.cutoff_points[sample]
-            data_segments = self.split_by_cutpoints(sample_data, sample_cutoffs, self.score_col)
+            data_segments = split_by_cutpoints(sample_data, sample_cutoffs, self.score_col)
 
             # Align each segment with its corresponding barycenter segment
             aligned_sample_segments = []

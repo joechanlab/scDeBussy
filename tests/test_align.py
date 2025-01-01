@@ -29,5 +29,5 @@ def test_cellaligndtw_align(sample_df, cluster_ordering):
     
     aligner.align()
     assert aligner.cutoff_points is not None
-    assert aligner.aligned_df is not None
+    assert np.isin('aligned_score', aligner.df.columns).any()
 

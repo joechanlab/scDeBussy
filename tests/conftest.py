@@ -5,13 +5,13 @@ import pandas as pd
 @pytest.fixture
 def sample_df():
     """Create a sample DataFrame for testing"""
-    n_samples = 100
+    n_samples = 150
     
     data = {
-        'sample': ['sample1', 'sample2'] * 50,
+        'sample': np.repeat(['sample1', 'sample2', 'sample3'], 50),
         'cell_id': [f'cell_{i}' for i in range(n_samples)],
-        'score': list(range(50)) + [x * 2 for x in range(50)],
-        'cell_type': (['typeA'] * 25 + ['typeB'] * 25) * 2
+        'score': np.sort(np.random.random((3, 50))).flatten() * 100,
+        'cell_type': np.tile(np.repeat(['typeA', 'typeB'], 25), 3)
     }
     
     return pd.DataFrame(data)
