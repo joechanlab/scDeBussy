@@ -24,10 +24,10 @@ def split_by_cutpoints(df, cutpoints, score_col):
     return segments
 
 class CellAlignDTW:
-    def __init__(self, df, cluster_ordering, sample_col, score_col, cell_id_col, cell_type_col, verbose=False):
+    def __init__(self, df, cluster_ordering, subject_col, score_col, cell_id_col, cell_type_col, verbose=False):
         self.df = df
         self.cluster_ordering = cluster_ordering
-        self.sample_col = sample_col
+        self.subject_col = subject_col
         self.score_col = score_col
         self.cell_id_col = cell_id_col
         self.cell_type_col = cell_type_col
@@ -43,14 +43,14 @@ class CellAlignDTW:
 
     def compute_cutoff_points_kmeans(self):
         cutoff_points = {}
-        samples = self.df[self.sample_col].unique()
+        subjects = self.df[self.subject_col].unique()
         num_clusters = len(self.cluster_ordering)
         
-        for sample in samples:
-            sample_data = self.df[self.df[self.sample_col] == sample]
+        for subject in subjects:
+            subject_data = self.df[self.df[self.subject_col] == subject]
             X = np.column_stack([
-                sample_data[self.score_col].values,
-                sample_data['numeric_label'].values
+                subject_data[self.score_col].values,
+                subject_data['numeric_label'].values
             ])
             
             # Fit GMM instead of KMeans
@@ -77,15 +77,15 @@ class CellAlignDTW:
                 cutoff = brentq(gaussian_diff, mu1, mu2)
                 cutoffs.append(cutoff)
             
-            cutoff_points[sample] = cutoffs
+            cutoff_points[subject] = cutoffs
         
         self.cutoff_points = cutoff_points
         print(cutoff_points)
 
     def align_with_continuous_barycenter(self):
         aligned_segments = {}
-        all_probabilities = [self.df[self.df[self.sample_col] == sample][self.score_col].to_numpy().reshape(-1, 1) for sample in self.df[self.sample_col].unique()]
-        all_cell_types = [self.df[self.df[self.sample_col] == sample][self.cell_type_col].tolist() for sample in self.df[self.sample_col].unique()]
+        all_probabilities = [self.df[self.df[self.subject_col] == subject][self.score_col].to_numpy().reshape(-1, 1) for subject in self.df[self.subject_col].unique()]
+        all_cell_types = [self.df[self.df[self.subject_col] == subject][self.cell_type_col].tolist() for subject in self.df[self.subject_col].unique()]
         continuous_barycenter, barycenter_categories, _  = dtw_barycenter_averaging_with_categories(all_probabilities, all_cell_types,
                                                         metric_params={'global_constraint':"sakoe_chiba", 'sakoe_chiba_radius': 1}, verbose=self.verbose)
         continuous_barycenter = continuous_barycenter.flatten()
@@ -107,13 +107,13 @@ class CellAlignDTW:
 
         barycenter_segments = split_by_cutpoints(pd.DataFrame({self.score_col: continuous_barycenter}), reference_cutpoints, self.score_col)
 
-        for sample in self.df[self.sample_col].unique():
-            sample_data = self.df[self.df[self.sample_col] == sample]
-            sample_cutoffs = self.cutoff_points[sample]
-            data_segments = split_by_cutpoints(sample_data, sample_cutoffs, self.score_col)
+        for subject in self.df[self.subject_col].unique():
+            subject_data = self.df[self.df[self.subject_col] == subject]
+            subject_cutoffs = self.cutoff_points[subject]
+            data_segments = split_by_cutpoints(subject_data, subject_cutoffs, self.score_col)
 
             # Align each segment with its corresponding barycenter segment
-            aligned_sample_segments = []
+            aligned_subject_segments = []
             for data_segment, barycenter_segment in zip(data_segments, barycenter_segments):                
                 path, _ = dtw_path(data_segment[self.score_col], barycenter_segment[self.score_col],
                                    global_constraint="sakoe_chiba", sakoe_chiba_radius = 1)
@@ -121,21 +121,21 @@ class CellAlignDTW:
                 original_indices = [data_segment[self.cell_id_col].iloc[i] for i, _ in path]
                 aligned_values = [barycenter_segment[self.score_col].iloc[j] for _, j in path]
 
-                aligned_sample_segments.append({
+                aligned_subject_segments.append({
                     "cell_id": original_indices,
                     "aligned_score": aligned_values
                 })
 
-            aligned_segments[sample] = aligned_sample_segments
+            aligned_segments[subject] = aligned_subject_segments
         
         return aligned_segments
 
     def create_aligned_dataframe(self, aligned_segments):
         aligned_df = pd.DataFrame()
-        for sample, segments in aligned_segments.items():
+        for subject, segments in aligned_segments.items():
             for segment in segments:
                 segment = pd.DataFrame(segment).drop_duplicates(subset="cell_id")
-                segment["sample"] = sample
+                segment["subject"] = subject
                 aligned_df = pd.concat([aligned_df, segment])
-        aligned_df = aligned_df.merge(self.df, on=['sample','cell_id'])
+        aligned_df = aligned_df.merge(self.df, on=['subject','cell_id'])
         self.df = aligned_df

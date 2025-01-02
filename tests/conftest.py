@@ -4,12 +4,12 @@ import pandas as pd
 
 @pytest.fixture
 def sample_df():
-    """Create a sample DataFrame for testing"""
-    n_samples = 150
+    """Create a example DataFrame for testing"""
+    n_subjects = 150
     
     data = {
-        'sample': np.repeat(['sample1', 'sample2', 'sample3'], 50),
-        'cell_id': [f'cell_{i}' for i in range(n_samples)],
+        'subject': np.repeat(['subject1', 'subject2', 'subject3'], 50),
+        'cell_id': [f'cell_{i}' for i in range(n_subjects)],
         'score': np.sort(np.random.random((3, 50))).flatten() * 100,
         'cell_type': np.tile(np.repeat(['typeA', 'typeB'], 25), 3)
     }
@@ -18,5 +18,5 @@ def sample_df():
 
 @pytest.fixture
 def cluster_ordering():
-    """Sample cluster ordering"""
+    """Example cluster ordering"""
     return ['typeA', 'typeB']

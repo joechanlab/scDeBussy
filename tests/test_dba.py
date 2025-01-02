@@ -4,7 +4,7 @@ from CellAlignDTW import dtw_barycenter_averaging_with_categories
 
 def test_dtw_barycenter_averaging_with_categories():
     # Create synthetic test data
-    n_samples = 3
+    n_subjects = 3
     seq_length = 5
     n_features = 2
     
@@ -55,7 +55,7 @@ def test_dtw_barycenter_averaging_with_categories():
         tol=1e-5,
         verbose=False
     )
-    
+    print(categories2)
     # Test assertions for numeric categories
     assert barycenter2.shape == (5, 2), "Barycenter shape should be (5, 2)"
     assert len(categories2) == 5, "Categories length should be 5"

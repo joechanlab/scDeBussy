@@ -151,7 +151,7 @@ def _mm_update_barycenter_with_categories(X, Y, diag_sum_v_k, list_w_k, list_y_k
     barycenter = np.diag(1. / diag_sum_v_k).dot(sum_w_x)
     
     # Determine majority categories for each time point
-    categories = np.zeros(barycenter_size)
+    categories = np.zeros(barycenter_size, dtype=int)
     for t in range(barycenter_size):
         # Collect all Y values aligned to this time point
         y_values = []
@@ -236,7 +236,7 @@ def dtw_barycenter_averaging_with_categories_one_init(X, Y, barycenter_size=None
         # Get aligned barycenter values
         aligned_barycenter = barycenter[barycenter_indices]
         aligned_barycenters.append(aligned_barycenter)
-            
+    
     return barycenter, categories, cost, aligned_barycenters
 
 def dtw_barycenter_averaging_with_categories(X, Y, barycenter_size=None, 
@@ -332,7 +332,6 @@ def dtw_barycenter_averaging_with_categories(X, Y, barycenter_size=None,
             best_aligned_barycenters = aligned_bary
     
     if label_encoder is not None:
-        best_categories = best_categories.astype(int)
         best_categories = label_encoder.inverse_transform(best_categories)
 
     return best_barycenter, best_categories, best_aligned_barycenters

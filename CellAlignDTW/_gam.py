@@ -30,43 +30,43 @@ def gam_smooth_expression(df, genes, n_splines = 6, lam = 3):
     gene_curve = pd.DataFrame(gene_curve)
     return summary_df, gene_curve, scores_df
 
-def _gam_smooth_expression(df, gene, n_splines=6, lam=3):
+def _gam_smooth_expression(df, gene, subject_col='subject', score_col='aligned_score', n_splines=6, lam=3):
     # Remove outliers
-    df = df[['sample', 'aligned_score', gene]]
-    df.columns = ['sample', 'aligned_score', 'expression']
-    df = _remove_outliers(df.copy(), 'aligned_score', method='zscore')
+    df = df[[subject_col, score_col, gene]]
+    df.columns = [subject_col, score_col, 'expression']
+    df = _remove_outliers(df.copy(), score_col, method='zscore')
     scaler = StandardScaler()
-    df['expression'] = df.groupby('sample')['expression'].transform(lambda x: StandardScaler().fit_transform(x.values.reshape(-1, 1)).flatten())
-    df.sort_values(by='aligned_score', inplace=True)
+    df['expression'] = df.groupby('subject')['expression'].transform(lambda x: StandardScaler().fit_transform(x.values.reshape(-1, 1)).flatten())
+    df.sort_values(by=score_col, inplace=True)
 
     # Extract features and target
-    x = df[['aligned_score', 'sample']].copy()
-    x['sample'] = x['sample'].astype('category').cat.codes
+    x = df[[score_col, 'subject']].copy()
+    x['subject'] = x['subject'].astype('category').cat.codes
     y = df['expression'].values
     
-    # Define and fit the GAM with sample as a factor
+    # Define and fit the GAM with subject as a factor
     gam = LinearGAM(s(0, n_splines=n_splines, lam=lam) + f(1)).fit(x, y)
     # Add smoothed values to the DataFrame
     df['smoothed'] = gam.predict(x)
     df['deviance_residue'] = gam.deviance_residuals(x, y)
-    sample_deviance_agg = df.groupby('sample')['deviance_residue'].mean().reset_index()
+    subject_deviance_agg = df.groupby('subject')['deviance_residue'].mean().reset_index()
 
-    # fit another GAM across the samples
+    # fit another GAM across the subjects
     # using the same sets of the x axis to produce the aggregated curve
-    x_grid = np.linspace(df['aligned_score'].min(), df['aligned_score'].max(), 1000)
+    x_grid = np.linspace(df[score_col].min(), df[score_col].max(), 1000)
     prediction_dfs = []
-    for sample in x['sample'].unique():
-        grid_df = pd.DataFrame({'aligned_score': x_grid})
-        grid_df['sample'] = sample
+    for subject in x['subject'].unique():
+        grid_df = pd.DataFrame({score_col: x_grid})
+        grid_df['subject'] = subject
         grid_df['smoothed'] = gam.predict(grid_df)
         prediction_dfs.append(grid_df)
     predictions_combined = pd.concat(prediction_dfs)
-    aggregated_curve = predictions_combined.groupby('aligned_score')['smoothed'].mean().reset_index()
+    aggregated_curve = predictions_combined.groupby(score_col)['smoothed'].mean().reset_index()
 
     # Compute evaluation metrics
-    mi_score = compute_mutual_information(aggregated_curve, 'aligned_score', 'smoothed')
+    mi_score = compute_mutual_information(aggregated_curve, score_col, 'smoothed')
     max_point = maximum_point(aggregated_curve['smoothed'])
-    total_deviance_mean = sample_deviance_agg['deviance_residue'].mean()
+    total_deviance_mean = subject_deviance_agg['deviance_residue'].mean()
     
     scores = {
         'gene': gene,

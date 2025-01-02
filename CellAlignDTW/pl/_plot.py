@@ -10,19 +10,19 @@ from matplotlib.colors import LinearSegmentedColormap
 import PyComplexHeatmap as pch
 
 def plot_sigmoid_fits(aligned_obj):
-    samples = aligned_obj.df[aligned_obj.sample_col].unique()
-    fig, axes = plt.subplots(nrows=1, ncols=len(samples), figsize=(15, 3), sharey=True)
-    for i, sample in enumerate(samples):
+    subjects = aligned_obj.df[aligned_obj.subject_col].unique()
+    fig, axes = plt.subplots(nrows=1, ncols=len(subjects), figsize=(15, 3), sharey=True)
+    for i, subject in enumerate(subjects):
         ax = axes[i]
-        sample_data = aligned_obj.df[aligned_obj.df[aligned_obj.sample_col] == sample]
-        x_data = sample_data[aligned_obj.score_col].values
-        y_data = sample_data['numeric_label'].values
-        cutoff_point = aligned_obj.cutoff_points[sample]
+        subject_data = aligned_obj.df[aligned_obj.df[aligned_obj.subject_col] == subject]
+        x_data = subject_data[aligned_obj.score_col].values
+        y_data = subject_data['numeric_label'].values
+        cutoff_point = aligned_obj.cutoff_points[subject]
         ax.scatter(x_data, y_data, alpha=0.01)
         for i, cutoff in enumerate(cutoff_point):
             ax.axvline(x=cutoff, color='green', linestyle='--', label=f'{cutoff:.2f}')
         ax.set_ylim(None)
-        ax.set_title(f'Sample: {sample}')
+        ax.set_title(f'Subject: {subject}')
         ax.set_xlabel('Score')
         if i == 0:
             ax.set_ylabel('Label')
@@ -34,18 +34,18 @@ def plot_summary_curve(summary_df, aggregated_curve, scores, genes, fig_size=(2,
     Plots summary curves for a list of genes.
 
     Parameters:
-    summary_df (DataFrame): DataFrame containing sample data with columns ['gene', 'sample', 'aligned_score', 'expression', 'smoothed'].
+    summary_df (DataFrame): DataFrame containing subject data with columns ['gene', 'subject', 'aligned_score', 'expression', 'smoothed'].
     aggregated_curve (DataFrame): DataFrame containing aggregated curve data with columns ['aligned_score'] and gene columns.
     scores (DataFrame): DataFrame containing scores with columns ['gene', 'MI', 'Max'].
     genes (list of str): List of gene names to plot.
     """
     num_genes = len(genes)
-    fig, axes = plt.subplots(num_genes, 1, figsize=(fig_size[0], fig_size[1] * num_genes), sharex=True)
+    fig, axes = plt.subplots(num_genes, 1, figsize=(fig_size[0], fig_size[1] * num_genes), sharex=True, dpi=600)
 
     if num_genes == 1:
         axes = [axes]  # Ensure axes is iterable if there's only one subplot
 
-    # Define a color cycle for samples
+    # Define a color cycle for subjects
     color_cycle = itertools.cycle(mcolors.TABLEAU_COLORS)
 
     scatter_handles = []
@@ -54,23 +54,25 @@ def plot_summary_curve(summary_df, aggregated_curve, scores, genes, fig_size=(2,
     for i, (ax, gene) in enumerate(zip(axes, genes)):
         gene_summary = summary_df.loc[summary_df['gene'] == gene]
         
-        # Plot each sample's smoothed curve and collect scatter handles
-        sample_colors = {}
-        for sample in gene_summary['sample'].unique():
+        # Plot each subject's smoothed curve and collect scatter handles
+        subject_colors = {}
+        for subject in gene_summary['subject'].unique():
             color = next(color_cycle)
-            sample_colors[sample] = color
-            sample_data = gene_summary[gene_summary['sample'] == sample]
-            ax.scatter(sample_data['aligned_score'], sample_data['expression'], alpha=pt_alpha, s=0.1, color=color)
-            ax.plot(sample_data['aligned_score'], sample_data['smoothed'], alpha=line_alpha, color=color)
+            subject_colors[subject] = color
+            subject_data = gene_summary[gene_summary['subject'] == subject]
+            ax.scatter(subject_data['aligned_score'], subject_data['expression'], alpha=pt_alpha, s=0.1, color=color)
+            ax.plot(subject_data['aligned_score'], subject_data['smoothed'], alpha=line_alpha, color=color)
             if i == 0:  # Collect labels only from the first subplot
                 scatter_handles.append(ax.scatter([], [], alpha=1, s=10, color=color))
-                scatter_labels.append(sample)
+                scatter_labels.append(subject)
         
         # Plot the aggregated curve
         agg_line, = ax.plot(aggregated_curve['aligned_score'], aggregated_curve[gene], color='black', linewidth=2)
 
         ax.set_ylim(ylim)
-        ax.set_ylabel('z-score')
+        ax.set_ylabel('')
+        ax.set_xticks([])
+        ax.set_yticks([])
         ax.set_title(gene)
 
     axes[-1].set_xlabel('Aligned score')
@@ -105,7 +107,7 @@ def plot_kshape_clustering(sorted_gene_curve, categories, label_orders=None, alp
 def fit_kde(sorted_gene_curve, df, cell_types, bandwidth=50):
     gene_density = pd.DataFrame(index=sorted_gene_curve.index)
     for cell_type in cell_types:
-        is_cell_type_gene = (np.isin(df, cell_type)).astype(int)
+        is_cell_type_gene = [cell_type in x if x is not np.nan else False for x in df] # (np.isin(df, cell_type)).astype(int)
         x = np.arange(len(is_cell_type_gene)).reshape(-1, 1)
         kde = KernelDensity(bandwidth=bandwidth, kernel='gaussian')
         kde.fit(x, sample_weight=is_cell_type_gene)
@@ -135,7 +137,7 @@ def plot_kde_density(density, title="", clusters=None, cluster_colors=None, name
 
     # Add bar plot for cell type annotations
     if clusters is not None:
-        unique_clusters = list(set(clusters))
+        unique_clusters = cluster_colors.keys()
         color_map = cluster_colors
         for i, cluster in enumerate(unique_clusters):
             subset = density.index[clusters == cluster]
@@ -158,6 +160,55 @@ def plot_kde_density(density, title="", clusters=None, cluster_colors=None, name
     plt.tight_layout()
     plt.show()
 
+def plot_kde_density_ridge(density, clusters=None, cluster_colors=None, 
+                           name_map=None, cell_type_order=None, figsize=(6, 4), fontsize=12):
+    if name_map is not None:
+        density.columns = density.columns.map(name_map)
+    n_cell_types = len(density.columns)
+    height_ratios = [2] * n_cell_types
+    n_rows = n_cell_types
+    if clusters is not None:
+        n_rows = n_cell_types + 1
+        height_ratios.append(0.5)
+
+    fig, ax = plt.subplots(n_rows, 1, 
+                           figsize=figsize, 
+                           gridspec_kw={'hspace': 0, 'height_ratios': height_ratios})
+    ordering = density.columns
+    if cell_type_order is not None:
+        ordering = cell_type_order
+    for i, cell_type in enumerate(ordering):
+        if cell_type in density.columns:
+            ax[i].plot(density.index, density[cell_type], label=cell_type)
+            ax[i].fill_between(density.index, density[cell_type], alpha=0.5)
+            ax[i].set_yticks([])
+            ax[i].set_xticks([])
+            ax[i].set_xlabel('')
+            for spine in ax[i].spines.values():
+                spine.set_visible(False)
+            ax[i].set_ylabel(cell_type, fontsize=fontsize, rotation=0, labelpad=10)
+
+    # Add bar plot for cell type annotations
+    if clusters is not None:
+        unique_clusters = cluster_colors.keys()
+        color_map = cluster_colors
+        for i, cluster in enumerate(unique_clusters):
+            subset = density.index[clusters == cluster]
+            ax[n_rows-1].bar(subset, height=0.1, bottom=-0.5, width=1, 
+                      color=cluster_colors[cluster], align='edge', alpha=1)
+        
+        # Add legend for cell types
+        handles = [plt.Line2D([0], [0], color=color_map[ct], lw=4) for ct in unique_clusters]
+        labels = unique_clusters
+        ax[n_rows-1].legend(handles, labels, loc='center left', bbox_to_anchor=(1, 0.5), fontsize='small', frameon=False)
+        ax[n_rows-1].set_yticks([])
+        ax[n_rows-1].set_xticks([])
+        for spine in ax[n_rows-1].spines.values():
+            spine.set_visible(False)
+        ax[n_rows-1].set_xlabel('Genes', fontsize=fontsize)
+    
+    plt.tight_layout()
+    plt.show()
 
 def plot_kde_heatmap(cluster_colors, cell_types, cell_type_colors, sorted_gene_curve, df_left, density=None, figsize=(4, 8), left_annotation_columns=None, vmin=-3, vmax=3, save_path=None):
     """

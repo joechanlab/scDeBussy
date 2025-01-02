@@ -61,43 +61,46 @@ def denoise_cell_type(df, cluster_ordering, original_assignments, threshold=0.1)
 
 def create_cellrank_probability_df(adata_paths, 
                                    cell_type_col,
-                                   sample_names, 
+                                   subject_names, 
                                    cellrank_cols_dict, 
                                    cluster_ordering,
-                                   cellrank_obsm='term_states_fwd_memberships',
+                                   cellrank_obsms,
                                    downsample=np.Inf,
                                    seed=42):
     df_dict = {}
     adata_list = []
+    subject_ordering = []
     for i, adata_path in enumerate(adata_paths):
-        sample_name = sample_names[i]
+        subject_name = subject_names[i]
         adata = sc.read_h5ad(adata_path)
         if 'SCLC-AN' in cluster_ordering:
             adata.obs[cell_type_col] = adata.obs[cell_type_col].astype(str).replace('SCLC-[AN]', 'SCLC-AN', regex=True)
-        adata.obs['sample'] = sample_name
-        if (not all(np.isin(cluster_ordering, adata.obs[cell_type_col].unique()))) or ((not cellrank_obsm in adata.obsm.keys()) and (not cellrank_obsm in adata.obs.keys())):
-            print(f"Skipping {sample_name} due to missing cell types")
+        adata.obs['subject'] = subject_name
+        if (not all(np.isin(cluster_ordering, adata.obs[cell_type_col].unique()))) or ((not cellrank_obsms[i] in adata.obsm.keys()) and (not cellrank_obsms[i] in adata.obs.keys())):
+            print(f"Skipping {subject_name} due to missing cell types")
             continue
         else: 
-            print(f"Processing {sample_name}")
+            subject_ordering.append(subject_name)
+            print(f"Processing {subject_name}")
             adata = adata[np.isin(adata.obs[cell_type_col], cluster_ordering),:].copy()
+            cellrank_obsm = cellrank_obsms[i]
             if cellrank_obsm == 'term_states_fwd_memberships':
                 df = pd.DataFrame(adata.obsm[cellrank_obsm],
-                                columns=cellrank_cols_dict[sample_name],
+                                columns=cellrank_cols_dict[subject_name],
                                 index=adata.obs_names)
-                df['sample'] = sample_name
+                df['subject'] = subject_name
                 df['cell_id'] = adata.obs_names
                 df['cell_type'] = adata.obs[cell_type_col].astype(str)
                 df_long = pd.melt(df, 
-                                id_vars=['sample', 'cell_id', 'cell_type'], 
+                                id_vars=['subject', 'cell_id', 'cell_type'], 
                                 var_name='macrostate',
                                 value_name='probability')
                 df_long['state'] = df_long['macrostate'].apply(lambda x: x.split("_")[0])
                 if 'SCLC-AN' in cluster_ordering:
                     df_long['state'] = df_long['state'].replace('SCLC-[AN]', 'SCLC-AN', regex=True)
                 df_long = df_long.drop('macrostate', axis=1)
-                df_long = df_long.groupby(['sample', 'cell_id', 'cell_type', 'state'], observed=True).max().dropna().reset_index()
-                df = df_long.pivot(index=['sample', 'cell_id', 'cell_type'], columns='state', values='probability').reset_index()
+                df_long = df_long.groupby(['subject', 'cell_id', 'cell_type', 'state'], observed=True).max().dropna().reset_index()
+                df = df_long.pivot(index=['subject', 'cell_id', 'cell_type'], columns='state', values='probability').reset_index()
                 df['cell_type'] = df[cluster_ordering].idxmax(axis=1)
                 df = df.loc[np.isin(df['cell_type'], cluster_ordering),:]
                 adata = adata[np.isin(adata.obs_names, df.cell_id),:].copy()
@@ -106,11 +109,11 @@ def create_cellrank_probability_df(adata_paths,
                 adata.obs['cell_type_corrected'] = df_cell_type.cell_type.values
                 df = calculate_composite_score(df, cluster_ordering)
 
-            elif cellrank_obsm == 'palantir_pseudotime_slalom':
+            elif 'palantir_pseudotime_slalom' in cellrank_obsm:
                 df = pd.DataFrame(adata.obs[cellrank_obsm].values,
                     columns=['score'],
                     index=adata.obs_names)
-                df['sample'] = sample_name
+                df['subject'] = subject_name
                 df['cell_id'] = adata.obs_names
                 df['cell_type'] = adata.obs[cell_type_col].astype(str)
 
@@ -121,16 +124,17 @@ def create_cellrank_probability_df(adata_paths,
             if df.shape[0] > downsample:
                 np.random.seed(seed)
                 df = stratified_downsample(df, 'score', downsample_size=downsample, seed=seed)
-                print(f'Downsampled {sample_name} from {n} to {df.shape[0]} cells')
+                print(f'Downsampled {subject_name} from {n} to {df.shape[0]} cells')
             adata_list.append(adata[df['cell_id'],:])
-            df_dict[sample_name] = df
+            df_dict[subject_name] = df
     score_df = pd.concat(df_dict, axis=0)
     score_df = score_df.reset_index(drop=True)
-    combined_adata = ad.concat(adata_list, join='outer', keys=sample_names)
+    combined_adata = ad.concat(adata_list, join='outer', keys=subject_names)
     gene_df = pd.DataFrame(combined_adata.layers['MAGIC_imputed_data'],
                           index = combined_adata.obs_names,
                           columns = combined_adata.var_names)
     gene_df = gene_df.reset_index(names='cell_id')
     df = score_df.merge(gene_df, on = ['cell_id'])
-    df = df.sort_values(['sample', 'score'])
+    df['subject'] = pd.Categorical(df['subject'], categories=subject_ordering, ordered=True)
+    df = df.sort_values(['subject', 'score'])
     return combined_adata, df

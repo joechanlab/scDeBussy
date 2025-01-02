@@ -1,13 +1,11 @@
-import pytest
 import numpy as np
-import pandas as pd
 from CellAlignDTW import CellAlignDTW
 
 def test_cellaligndtw_initialization(sample_df, cluster_ordering):
     aligner = CellAlignDTW(
         df=sample_df,
         cluster_ordering=cluster_ordering,
-        sample_col='sample',
+        subject_col='subject',
         score_col='score',
         cell_id_col='cell_id',
         cell_type_col='cell_type'
@@ -21,7 +19,7 @@ def test_cellaligndtw_align(sample_df, cluster_ordering):
     aligner = CellAlignDTW(
         df=sample_df,
         cluster_ordering=cluster_ordering,
-        sample_col='sample',
+        subject_col='subject',
         score_col='score',
         cell_id_col='cell_id',
         cell_type_col='cell_type'

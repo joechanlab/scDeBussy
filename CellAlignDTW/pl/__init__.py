@@ -1,1 +1,1 @@
-from ._plot import plot_sigmoid_fits, plot_summary_curve, plot_gene_clusters, plot_kshape_clustering, plot_kde_heatmap, fit_kde, plot_kde_density
+from ._plot import plot_sigmoid_fits, plot_summary_curve, plot_gene_clusters, plot_kshape_clustering, plot_kde_heatmap, fit_kde, plot_kde_density, plot_kde_density_ridge

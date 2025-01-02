@@ -128,7 +128,7 @@ def sliding_window_enrichment(gene_list, gene_set, window_size, gamma, step_size
     return result_df
 
 
-def permutation_test_with_nes(enrichment_signal, gene_list, gene_set, window_size, step_size, gamma, num_permutations=1000):
+def permutation_test_with_nes(enrichment_signal, gene_list, gene_set, window_size=250, step_size=5, gamma=0.01, num_permutations=1000):
     """
     Perform a permutation test to calculate a normalized enrichment score (NES).
 
