@@ -103,3 +103,33 @@ def test_dtw_barycenter_averaging_with_categories_edge_cases():
     )
     
     assert len(categories_random) == len(categories_weighted) == 2
+
+def test_dtw_barycenter_averaging_with_categories_ragged():
+    # Create ragged test data with different sequence lengths
+    X_ragged = [
+        [[1, 2], [2, 3], [3, 4], [4, 5]],          # 4 time points
+        [[1, 1], [2, 2], [3, 3]],                   # 3 time points
+        [[2, 1], [3, 2], [4, 3], [5, 4], [6, 5]]   # 5 time points
+    ]
+    
+    Y_ragged = [
+        ['A', 'A', 'B', 'C'],          # 4 categories
+        ['A', 'B', 'C'],               # 3 categories
+        ['A', 'B', 'B', 'C', 'C']      # 5 categories
+    ]
+    
+    # Run the function
+    barycenter, categories, aligned_barycenters = dtw_barycenter_averaging_with_categories(
+        X=X_ragged,
+        Y=Y_ragged,
+        barycenter_size=4,  # Choose desired output length
+        max_iter=30,
+        tol=1e-5,
+        verbose=False
+    )
+    
+    # Test assertions
+    assert barycenter.shape == (4, 2), "Barycenter shape should be (4, 2)"
+    assert len(categories) == 4, "Categories length should be 4"
+    assert len(aligned_barycenters) == 3, "Should have aligned barycenters for each input sequence"
+    assert all(cat in ['A', 'B', 'C'] for cat in categories), "All categories should be A, B, or C"
