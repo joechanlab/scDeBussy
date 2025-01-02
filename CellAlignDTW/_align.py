@@ -7,21 +7,7 @@ from scipy.optimize import brentq
 from tslearn.metrics import dtw_path
 from scipy.optimize import curve_fit
 from ._dba import dtw_barycenter_averaging_with_categories
-
-def split_by_cutpoints(df, cutpoints, score_col):
-    segments = [[] for _ in range(len(cutpoints) + 1)]
-    
-    for _, row in df.iterrows():
-        value = row[score_col]
-        for i, cutoff in enumerate(cutpoints):
-            if value < cutoff:
-                segments[i].append(row)
-                break
-        else:
-            segments[-1].append(row)
-    
-    segments = [pd.DataFrame(segment) for segment in segments]
-    return segments
+from ._utils import split_by_cutpoints
 
 class CellAlignDTW:
     def __init__(self, df, cluster_ordering, subject_col, score_col, cell_id_col, cell_type_col, verbose=False):
