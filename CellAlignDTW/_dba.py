@@ -24,15 +24,30 @@ def _convert_categorical(Y):
         The encoder used for conversion (None if Y was already numeric)
     """
     # Check if Y is already numeric
-    if np.issubdtype(Y.dtype, np.number):
-        print("Y is already numeric categorical. No conversion needed.")
-        return Y, None
+    if hasattr(Y, 'dtype'):
+        if np.issubdtype(Y.dtype, np.number):
+            print("Y is already numeric categorical. No conversion needed.")
+            return Y, None
+    else:
+        # Check if all elements are numeric
+        try:
+            if all(isinstance(item, (int, float)) for row in Y for item in row):
+                print("Y is already numeric categorical. No conversion needed.")
+                return Y, None
+        except TypeError:  # Handle case where items aren't iterable
+            if all(isinstance(item, (int, float)) for item in Y):
+                print("Y is already numeric categorical. No conversion needed.")
+                return Y, None
     
     # Convert non-numeric categories to numeric
     label_encoder = LabelEncoder()
-    Y_flat = Y.ravel()
-    Y_numeric = label_encoder.fit_transform(Y_flat).reshape(Y.shape)
-    
+    Y_flat = [item for row in Y for item in row]
+    label_encoder.fit(Y_flat)
+    Y_numeric = [
+        [label_encoder.transform([item])[0] for item in row]
+        for row in Y
+    ]
+
     # Print mapping
     print("Category mapping:")
     for i, category in enumerate(label_encoder.classes_):
@@ -136,7 +151,7 @@ def _mm_update_barycenter_with_categories(X, Y, diag_sum_v_k, list_w_k, list_y_k
     barycenter = np.diag(1. / diag_sum_v_k).dot(sum_w_x)
     
     # Determine majority categories for each time point
-    categories = np.zeros(barycenter_size, dtype=Y.dtype)
+    categories = np.zeros(barycenter_size)
     for t in range(barycenter_size):
         # Collect all Y values aligned to this time point
         y_values = []
@@ -144,7 +159,7 @@ def _mm_update_barycenter_with_categories(X, Y, diag_sum_v_k, list_w_k, list_y_k
         for y_aligned in list_y_k:
             for idx, time_idx in y_aligned:
                 if time_idx == t:
-                    y_values.append(Y[idx, time_idx])
+                    y_values.append(Y[idx][time_idx])
                     y_weights.append(weights[idx])
                     
         # Get majority vote if we have any alignments
@@ -317,6 +332,7 @@ def dtw_barycenter_averaging_with_categories(X, Y, barycenter_size=None,
             best_aligned_barycenters = aligned_bary
     
     if label_encoder is not None:
+        best_categories = best_categories.astype(int)
         best_categories = label_encoder.inverse_transform(best_categories)
 
     return best_barycenter, best_categories, best_aligned_barycenters

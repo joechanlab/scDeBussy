@@ -24,7 +24,7 @@ def split_by_cutpoints(df, cutpoints, score_col):
     return segments
 
 class CellAlignDTW:
-    def __init__(self, df, cluster_ordering, sample_col, score_col, cell_id_col, cell_type_col):
+    def __init__(self, df, cluster_ordering, sample_col, score_col, cell_id_col, cell_type_col, verbose=False):
         self.df = df
         self.cluster_ordering = cluster_ordering
         self.sample_col = sample_col
@@ -34,6 +34,7 @@ class CellAlignDTW:
         self.cutoff_points = None
         self.label_mapping = {label: idx for idx, label in enumerate(cluster_ordering)}
         self.df['numeric_label'] = self.df[cell_type_col].map(self.label_mapping)
+        self.verbose = verbose
 
     def align(self):
         self.compute_cutoff_points_kmeans()
@@ -84,9 +85,9 @@ class CellAlignDTW:
     def align_with_continuous_barycenter(self):
         aligned_segments = {}
         all_probabilities = [self.df[self.df[self.sample_col] == sample][self.score_col].to_numpy().reshape(-1, 1) for sample in self.df[self.sample_col].unique()]
-        all_cell_types = np.array([self.df[self.df[self.sample_col] == sample][self.cell_type_col].tolist() for sample in self.df[self.sample_col].unique()])
+        all_cell_types = [self.df[self.df[self.sample_col] == sample][self.cell_type_col].tolist() for sample in self.df[self.sample_col].unique()]
         continuous_barycenter, barycenter_categories, _  = dtw_barycenter_averaging_with_categories(all_probabilities, all_cell_types,
-                                                        metric_params={'global_constraint':"sakoe_chiba", 'sakoe_chiba_radius': 1})
+                                                        metric_params={'global_constraint':"sakoe_chiba", 'sakoe_chiba_radius': 1}, verbose=self.verbose)
         continuous_barycenter = continuous_barycenter.flatten()
         barycenter_categories = [self.label_mapping[x] for x in barycenter_categories]
         
