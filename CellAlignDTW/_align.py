@@ -41,7 +41,6 @@ class CellAlignDTW:
             cutoff_points[subject] = compute_gmm_cutpoints(X, num_clusters)
         
         self.cutoff_points = cutoff_points
-        print(cutoff_points)
 
     def align_with_continuous_barycenter(self):
         aligned_segments = {}
@@ -88,8 +87,8 @@ class CellAlignDTW:
         aligned_df = pd.DataFrame()
         for subject, segments in aligned_segments.items():
             for segment in segments:
-                segment = pd.DataFrame(segment).drop_duplicates(subset="cell_id")
-                segment["subject"] = subject
+                segment = pd.DataFrame(segment).drop_duplicates(subset=self.cell_id_col)
+                segment[self.subject_col] = subject
                 aligned_df = pd.concat([aligned_df, segment])
-        aligned_df = aligned_df.merge(self.df, on=['subject','cell_id'])
+        aligned_df = aligned_df.merge(self.df, on=[self.subject_col, self.cell_id_col])
         self.df = aligned_df

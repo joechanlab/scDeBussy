@@ -8,7 +8,7 @@ from tslearn.metrics import dtw_path
 from tslearn.utils import to_time_series_dataset, ts_size
 from tslearn.barycenters.utils import _set_weights
 
-def _convert_categorical(Y):
+def _convert_categorical(Y, verbose=False):
     """Convert categorical variables to numeric if needed and return mapping.
     
     Parameters
@@ -26,17 +26,17 @@ def _convert_categorical(Y):
     # Check if Y is already numeric
     if hasattr(Y, 'dtype'):
         if np.issubdtype(Y.dtype, np.number):
-            print("Y is already numeric categorical. No conversion needed.")
+            if verbose: print("Y is already numeric categorical. No conversion needed.")
             return Y, None
     else:
         # Check if all elements are numeric
         try:
             if all(isinstance(item, (int, float)) for row in Y for item in row):
-                print("Y is already numeric categorical. No conversion needed.")
+                if verbose: print("Y is already numeric categorical. No conversion needed.")
                 return Y, None
         except TypeError:  # Handle case where items aren't iterable
             if all(isinstance(item, (int, float)) for item in Y):
-                print("Y is already numeric categorical. No conversion needed.")
+                if verbose: print("Y is already numeric categorical. No conversion needed.")
                 return Y, None
     
     # Convert non-numeric categories to numeric
@@ -49,9 +49,10 @@ def _convert_categorical(Y):
     ]
 
     # Print mapping
-    print("Category mapping:")
-    for i, category in enumerate(label_encoder.classes_):
-        print(f"  {category} -> {i}")
+    if verbose: 
+        print("Category mapping:")
+        for i, category in enumerate(label_encoder.classes_):
+            print(f"  {category} -> {i}")
     
     return Y_numeric, label_encoder
 
@@ -304,7 +305,7 @@ def dtw_barycenter_averaging_with_categories(X, Y, barycenter_size=None,
         categories : numpy.array of shape (barycenter_size,)
             Majority vote categories for each time point
     """
-    Y_numeric, label_encoder = _convert_categorical(Y)
+    Y_numeric, label_encoder = _convert_categorical(Y, verbose=verbose)
     
     best_cost = np.inf
     best_barycenter = None
