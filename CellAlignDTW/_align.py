@@ -29,11 +29,12 @@ class CellAlignDTW:
 
     def compute_cutoff_points_gmm(self):
         cutoff_points = {}
-        subjects = self.df[self.subject_col].unique()
+        df = self.df[[self.subject_col, self.score_col, 'numeric_label']].copy()
+        subjects = df[self.subject_col].unique()
         num_clusters = len(self.cluster_ordering)
         
         for subject in subjects:
-            subject_data = self.df[self.df[self.subject_col] == subject]
+            subject_data = df[df[self.subject_col] == subject]
             X = np.column_stack([
                 subject_data[self.score_col].values,
                 subject_data['numeric_label'].values
@@ -45,8 +46,9 @@ class CellAlignDTW:
 
     def align_with_continuous_barycenter(self):
         aligned_segments = {}
-        all_probabilities = [self.df[self.df[self.subject_col] == subject][self.score_col].to_numpy().reshape(-1, 1) for subject in self.df[self.subject_col].unique()]
-        all_cell_types = [self.df[self.df[self.subject_col] == subject][self.cell_type_col].tolist() for subject in self.df[self.subject_col].unique()]
+        df = self.df[[self.subject_col, self.score_col, self.cell_id_col, self.cell_type_col]].copy()
+        all_probabilities = [df[df[self.subject_col] == subject][self.score_col].to_numpy().reshape(-1, 1) for subject in df[self.subject_col].unique()]
+        all_cell_types = [df[df[self.subject_col] == subject][self.cell_type_col].tolist() for subject in df[self.subject_col].unique()]
         
         continuous_barycenter, barycenter_categories, _  = dtw_barycenter_averaging_with_categories(all_probabilities, all_cell_types,
                                                         metric_params={'global_constraint':"sakoe_chiba", 'sakoe_chiba_radius': 1}, 
@@ -63,8 +65,8 @@ class CellAlignDTW:
         if self.verbose: print(reference_cutpoints)
         barycenter_segments = split_by_cutpoints(pd.DataFrame({self.score_col: continuous_barycenter}), reference_cutpoints, self.score_col)
 
-        for subject in self.df[self.subject_col].unique():
-            subject_data = self.df[self.df[self.subject_col] == subject]
+        for subject in df[self.subject_col].unique():
+            subject_data = df[df[self.subject_col] == subject]
             subject_cutoffs = self.cutoff_points[subject]
             data_segments = split_by_cutpoints(subject_data, subject_cutoffs, self.score_col)
 
