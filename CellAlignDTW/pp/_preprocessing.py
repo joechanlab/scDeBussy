@@ -2,6 +2,7 @@ import scanpy as sc
 import pandas as pd
 import numpy as np
 import anndata as ad
+import scipy
 
 def calculate_composite_score(df, score_columns):
     # normalize each row to 1
@@ -61,11 +62,12 @@ def denoise_cell_type(df, cluster_ordering, original_assignments, threshold=0.1)
 
 def create_cellrank_probability_df(adata_paths, 
                                    cell_type_col,
-                                   subject_names, 
-                                   cellrank_cols_dict, 
+                                   subject_names,
                                    cluster_ordering,
-                                   cellrank_obsms,
+                                   pseudotime_col,
+                                   cellrank_cols_dict=None, 
                                    downsample=np.Inf,
+                                   layer=None,
                                    seed=42):
     df_dict = {}
     adata_list = []
@@ -76,16 +78,15 @@ def create_cellrank_probability_df(adata_paths,
         if 'SCLC-AN' in cluster_ordering:
             adata.obs[cell_type_col] = adata.obs[cell_type_col].astype(str).replace('SCLC-[AN]', 'SCLC-AN', regex=True)
         adata.obs['subject'] = subject_name
-        if (not all(np.isin(cluster_ordering, adata.obs[cell_type_col].unique()))) or ((not cellrank_obsms[i] in adata.obsm.keys()) and (not cellrank_obsms[i] in adata.obs.keys())):
+        if (not all(np.isin(cluster_ordering, adata.obs[cell_type_col].unique()))) or ((not pseudotime_col in adata.obsm.keys()) and (not pseudotime_col in adata.obs.keys())):
             print(f"Skipping {subject_name} due to missing cell types")
             continue
         else: 
             subject_ordering.append(subject_name)
             print(f"Processing {subject_name}")
             adata = adata[np.isin(adata.obs[cell_type_col], cluster_ordering),:].copy()
-            cellrank_obsm = cellrank_obsms[i]
-            if cellrank_obsm == 'term_states_fwd_memberships':
-                df = pd.DataFrame(adata.obsm[cellrank_obsm],
+            if pseudotime_col == 'term_states_fwd_memberships':
+                df = pd.DataFrame(adata.obsm[pseudotime_col],
                                 columns=cellrank_cols_dict[subject_name],
                                 index=adata.obs_names)
                 df['subject'] = subject_name
@@ -109,8 +110,8 @@ def create_cellrank_probability_df(adata_paths,
                 adata.obs['cell_type_corrected'] = df_cell_type.cell_type.values
                 df = calculate_composite_score(df, cluster_ordering)
 
-            elif 'palantir_pseudotime_slalom' in cellrank_obsm:
-                df = pd.DataFrame(adata.obs[cellrank_obsm].values,
+            elif 'palantir_pseudotime' in pseudotime_col:
+                df = pd.DataFrame(adata.obs[pseudotime_col].values,
                     columns=['score'],
                     index=adata.obs_names)
                 df['subject'] = subject_name
@@ -130,7 +131,13 @@ def create_cellrank_probability_df(adata_paths,
     score_df = pd.concat(df_dict, axis=0)
     score_df = score_df.reset_index(drop=True)
     combined_adata = ad.concat(adata_list, join='outer', keys=subject_names)
-    gene_df = pd.DataFrame(combined_adata.layers['MAGIC_imputed_data'],
+    if layer is not None:
+        X = combined_adata.layers[layer] #'MAGIC_imputed_data'
+    else:
+        X = combined_adata.X
+    if scipy.sparse.issparse(X):
+        X = X.toarray()
+    gene_df = pd.DataFrame(X,
                           index = combined_adata.obs_names,
                           columns = combined_adata.var_names)
     gene_df = gene_df.reset_index(names='cell_id')
