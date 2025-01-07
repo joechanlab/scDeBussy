@@ -5,27 +5,44 @@ import scipy.stats as stats
 from scipy.optimize import brentq
 
 
-def split_by_cutpoints(df, cutpoints, score_col):
+def split_by_cutpoints(df, cutpoints, score_cols):
     """
-    Split a DataFrame into segments based on cutpoints in a specified column.
+    Split a DataFrame into segments based on consensus cutpoints across specified columns.
 
     Args:
         df (pd.DataFrame): DataFrame to be split.
-        cutpoints (list): List of cutpoints to split the DataFrame.
-        score_col (str): Column name in the DataFrame to split based on.
+        cutpoints (list of lists): List of cutpoint lists for each dimension.
+            Each inner list contains cutpoints for the corresponding column.
+            All inner lists must have the same length.
+        score_cols (str or list): Column name(s) in the DataFrame to split based on.
+            If string, treated as single column. If list, must match length of cutpoints.
 
     Returns:
-        list: List of DataFrames, each representing a segment split by the cutpoints.
+        list: List of DataFrames, each representing a segment split by the consensus cutpoints.
     """
-    segments = [[] for _ in range(len(cutpoints) + 1)]
+    # Convert single column to list for consistent handling
+    if isinstance(score_cols, str):
+        score_cols = [score_cols]
+    
+    if len(score_cols) != len(cutpoints):
+        raise ValueError("Number of score columns must match number of cutpoint lists")
+    
+    # Verify all cutpoint lists have the same length
+    n_cuts = len(cutpoints[0])
+    if not all(len(cuts) == n_cuts for cuts in cutpoints):
+        raise ValueError("All dimensions must have the same number of cutpoints")
+    
+    segments = [[] for _ in range(n_cuts + 1)]
     
     for _, row in df.iterrows():
-        value = row[score_col]
-        for i, cutoff in enumerate(cutpoints):
-            if value < cutoff:
+        # Find the first cutpoint index where the point exceeds the threshold in any dimension
+        for i in range(n_cuts):
+            # Check if point is below all cutpoints at index i
+            if all(row[col] < cuts[i] for col, cuts in zip(score_cols, cutpoints)):
                 segments[i].append(row)
                 break
         else:
+            # If no cutpoint was lower in all dimensions, point goes to last segment
             segments[-1].append(row)
     
     segments = [pd.DataFrame(segment) for segment in segments]
@@ -34,39 +51,47 @@ def split_by_cutpoints(df, cutpoints, score_col):
 
 def compute_gmm_cutpoints(X, n_components):
     """
-    Compute cutoff points between clusters using Gaussian Mixture Models.
+    Compute cutoff points between clusters using Gaussian Mixture Models for all dimensions.
     
     Args:
-        X: array-like of shape (n_samples, 2)
-           First column contains scores, second column contains numeric labels
+        X: array-like of shape (n_samples, n_dimensions)
+           Input data matrix where each column represents a dimension
         n_components: int
            Number of components/clusters to fit
            
     Returns:
-        list: Sorted cutoff points between adjacent Gaussian components
+        list of lists: Each inner list contains sorted cutoff points between adjacent 
+                      Gaussian components for one dimension
     """
     # Fit GMM
     gmm = GaussianMixture(n_components=n_components, random_state=42)
     gmm.fit(X)
     
-    # Sort components by their means
-    means = gmm.means_[:, 0]  # Get means of the score dimension
-    sorted_indices = np.argsort(means)
+    n_dimensions = X.shape[1]
+    all_cutoffs = []
     
-    # Calculate intersection points between adjacent Gaussians
-    cutoffs = []
-    for i in range(len(sorted_indices)-1):
-        idx1, idx2 = sorted_indices[i], sorted_indices[i+1]
-        mu1, sigma1 = means[idx1], np.sqrt(gmm.covariances_[idx1][0,0])
-        mu2, sigma2 = means[idx2], np.sqrt(gmm.covariances_[idx2][0,0])
+    # Process each dimension
+    for dim in range(n_dimensions):
+        # Sort components by their means for this dimension
+        means = gmm.means_[:, dim]
+        sorted_indices = np.argsort(means)
         
-        # Find intersection point of the two Gaussians
-        def gaussian_diff(x):
-            return (stats.norm.pdf(x, mu1, sigma1) * gmm.weights_[idx1] - 
-                   stats.norm.pdf(x, mu2, sigma2) * gmm.weights_[idx2])
+        # Calculate intersection points between adjacent Gaussians
+        cutoffs = []
+        for i in range(len(sorted_indices)-1):
+            idx1, idx2 = sorted_indices[i], sorted_indices[i+1]
+            mu1, sigma1 = means[idx1], np.sqrt(gmm.covariances_[idx1][dim,dim])
+            mu2, sigma2 = means[idx2], np.sqrt(gmm.covariances_[idx2][dim,dim])
+            
+            # Find intersection point of the two Gaussians
+            def gaussian_diff(x):
+                return (stats.norm.pdf(x, mu1, sigma1) * gmm.weights_[idx1] - 
+                       stats.norm.pdf(x, mu2, sigma2) * gmm.weights_[idx2])
+            
+            # Search for zero crossing between the means
+            cutoff = brentq(gaussian_diff, mu1, mu2)
+            cutoffs.append(cutoff)
         
-        # Search for zero crossing between the means
-        cutoff = brentq(gaussian_diff, mu1, mu2)
-        cutoffs.append(cutoff)
+        all_cutoffs.append(cutoffs)
     
-    return cutoffs
+    return all_cutoffs

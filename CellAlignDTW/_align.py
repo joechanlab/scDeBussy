@@ -38,16 +38,19 @@ class CellAlignDTW:
                 subject_data[self.score_col].values,
                 subject_data['numeric_label'].values
             ])
-            cutoff_points[subject] = compute_gmm_cutpoints(X, num_clusters)
+            cutoff_points[subject] = compute_gmm_cutpoints(X, num_clusters)[0:-1]
         
         self.cutoff_points = cutoff_points
+        print(cutoff_points)
 
     def align_with_continuous_barycenter(self):
         aligned_segments = {}
         all_probabilities = [self.df[self.df[self.subject_col] == subject][self.score_col].to_numpy().reshape(-1, 1) for subject in self.df[self.subject_col].unique()]
         all_cell_types = [self.df[self.df[self.subject_col] == subject][self.cell_type_col].tolist() for subject in self.df[self.subject_col].unique()]
+        
         continuous_barycenter, barycenter_categories, _  = dtw_barycenter_averaging_with_categories(all_probabilities, all_cell_types,
-                                                        metric_params={'global_constraint':"sakoe_chiba", 'sakoe_chiba_radius': 1}, verbose=self.verbose)
+                                                        metric_params={'global_constraint':"sakoe_chiba", 'sakoe_chiba_radius': 1}, 
+                                                        verbose=self.verbose)
         continuous_barycenter = continuous_barycenter.flatten()
         barycenter_categories = [self.label_mapping[x] for x in barycenter_categories]
         
@@ -56,8 +59,8 @@ class CellAlignDTW:
             barycenter_categories
         ])
         
-        reference_cutpoints = compute_gmm_cutpoints(X, len(self.cluster_ordering))
-
+        reference_cutpoints = compute_gmm_cutpoints(X, len(self.cluster_ordering))[0:-1]
+        if self.verbose: print(reference_cutpoints)
         barycenter_segments = split_by_cutpoints(pd.DataFrame({self.score_col: continuous_barycenter}), reference_cutpoints, self.score_col)
 
         for subject in self.df[self.subject_col].unique():
@@ -67,15 +70,15 @@ class CellAlignDTW:
 
             # Align each segment with its corresponding barycenter segment
             aligned_subject_segments = []
-            for data_segment, barycenter_segment in zip(data_segments, barycenter_segments):                
+            for data_segment, barycenter_segment in zip(data_segments, barycenter_segments):
                 path, _ = dtw_path(data_segment[self.score_col], barycenter_segment[self.score_col],
-                                   global_constraint="sakoe_chiba", sakoe_chiba_radius = 1)
+                                   global_constraint="sakoe_chiba", sakoe_chiba_radius=1)
 
                 original_indices = [data_segment[self.cell_id_col].iloc[i] for i, _ in path]
                 aligned_values = [barycenter_segment[self.score_col].iloc[j] for _, j in path]
 
                 aligned_subject_segments.append({
-                    "cell_id": original_indices,
+                    self.cell_id_col: original_indices,
                     "aligned_score": aligned_values
                 })
 
