@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 import numpy as np
-from CellAlignDTW._utils import split_by_cutpoints
+from CellAlignDTW._utils import split_by_cutpoints, compute_gmm_cutpoints
 
 def test_split_by_cutpoints_single_column():
     # Create sample DataFrame
@@ -78,3 +78,35 @@ def test_split_by_cutpoints_edge_cases():
     assert len(segments) == 2
     assert len(segments[0]) == 2  # Values below cutpoint
     assert len(segments[1]) == 2  # Values above cutpoint
+
+def test_compute_gmm_cutpoints():
+    # Create synthetic 2D data with 3 clear clusters
+    np.random.seed(42)
+    n_samples = 300
+    
+    # Generate three clusters with different means
+    cluster1 = np.random.normal(loc=[0, 0], scale=0.5, size=(n_samples, 2))
+    cluster2 = np.random.normal(loc=[3, 3], scale=0.5, size=(n_samples, 2))
+    cluster3 = np.random.normal(loc=[6, 6], scale=0.5, size=(n_samples, 2))
+    
+    # Combine clusters
+    X = np.vstack([cluster1, cluster2, cluster3])
+    
+    # Compute cutpoints
+    cutpoints = compute_gmm_cutpoints(X, n_components=3)
+    
+    # Basic checks
+    assert len(cutpoints) == 2  # Should have cutpoints for both dimensions
+    assert len(cutpoints[0]) == 2  # Should have 2 cutpoints for 3 components
+    assert len(cutpoints[1]) == 2
+    
+    # Cutpoints should be roughly between cluster means
+    assert 1 < cutpoints[0][0] < 5  # First dimension, first cutpoint
+    assert 1 < cutpoints[1][0] < 5  # Second dimension, first cutpoint
+    assert 4 < cutpoints[0][1] < 8  # First dimension, second cutpoint
+    assert 4 < cutpoints[1][1] < 8  # Second dimension, second cutpoint
+    
+    # Cutpoints should be sorted
+    assert cutpoints[0][0] < cutpoints[0][1]  # First dimension
+    assert cutpoints[1][0] < cutpoints[1][1]  # Second dimension
+    

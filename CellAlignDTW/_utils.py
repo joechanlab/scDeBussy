@@ -20,6 +20,7 @@ def split_by_cutpoints(df, cutpoints, score_cols):
     Returns:
         list: List of DataFrames, each representing a segment split by the consensus cutpoints.
     """
+
     # Convert single column to list for consistent handling
     if isinstance(score_cols, str):
         score_cols = [score_cols]
@@ -68,30 +69,25 @@ def compute_gmm_cutpoints(X, n_components):
     gmm.fit(X)
     
     n_dimensions = X.shape[1]
-    all_cutoffs = []
+    all_cutoffs = [[] for _ in range(n_dimensions)]
+    n_cutoffs = n_components - 1
     
-    # Process each dimension
-    for dim in range(n_dimensions):
-        # Sort components by their means for this dimension
-        means = gmm.means_[:, dim]
-        sorted_indices = np.argsort(means)
-        
-        # Calculate intersection points between adjacent Gaussians
-        cutoffs = []
-        for i in range(len(sorted_indices)-1):
+    # First loop through cutoff points
+    for i in range(n_cutoffs):
+        # Then through dimensions
+        for dim in range(n_dimensions):
+            means = gmm.means_[:, dim]
+            sorted_indices = np.argsort(means)
+            
             idx1, idx2 = sorted_indices[i], sorted_indices[i+1]
             mu1, sigma1 = means[idx1], np.sqrt(gmm.covariances_[idx1][dim,dim])
             mu2, sigma2 = means[idx2], np.sqrt(gmm.covariances_[idx2][dim,dim])
             
-            # Find intersection point of the two Gaussians
             def gaussian_diff(x):
                 return (stats.norm.pdf(x, mu1, sigma1) * gmm.weights_[idx1] - 
                        stats.norm.pdf(x, mu2, sigma2) * gmm.weights_[idx2])
             
-            # Search for zero crossing between the means
             cutoff = brentq(gaussian_diff, mu1, mu2)
-            cutoffs.append(cutoff)
-        
-        all_cutoffs.append(cutoffs)
+            all_cutoffs[dim].append(cutoff)
     
     return all_cutoffs

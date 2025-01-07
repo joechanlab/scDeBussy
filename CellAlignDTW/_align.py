@@ -41,7 +41,7 @@ class CellAlignDTW:
             cutoff_points[subject] = compute_gmm_cutpoints(X, num_clusters)[0:-1]
         
         self.cutoff_points = cutoff_points
-        print(cutoff_points)
+        if self.verbose: print(cutoff_points)
 
     def align_with_continuous_barycenter(self):
         aligned_segments = {}
