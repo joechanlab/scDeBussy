@@ -15,7 +15,7 @@ def gam_smooth_expression(df, genes, n_splines = 6, lam = 3):
     scores_list = []
     summary_df_list = []
     for i, gene in enumerate(tqdm(genes, desc="Processing genes")):
-        summary_df, aggregated_curve, scores = _gam_smooth_expression(df, gene, n_splines, lam)
+        summary_df, aggregated_curve, scores = _gam_smooth_expression(df, gene, n_splines=n_splines, lam=lam)
         if i == 0:
             gene_curve['aligned_score'] = aggregated_curve['aligned_score']
         gene_curve[gene] = aggregated_curve.smoothed
