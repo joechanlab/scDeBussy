@@ -1,9 +1,12 @@
+import sys
 import numpy as np
 import pandas as pd
 from sklearn.mixture import GaussianMixture
 import scipy.stats as stats
 from scipy.optimize import brentq
-
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 def split_by_cutpoints(df, cutpoints, score_cols):
     """
@@ -86,8 +89,11 @@ def compute_gmm_cutpoints(X, n_components):
             def gaussian_diff(x):
                 return (stats.norm.pdf(x, mu1, sigma1) * gmm.weights_[idx1] - 
                        stats.norm.pdf(x, mu2, sigma2) * gmm.weights_[idx2])
-            
-            cutoff = brentq(gaussian_diff, mu1, mu2)
+            try:
+                cutoff = brentq(gaussian_diff, mu1, mu2)
+            except Exception as e:
+                logger.error(f"Unable to determine the pseudotime transition point from cell type {i} to cell type {i + 1}. To find out which sample has this issue, set verbose=True and please check the pseudotime distribution of that sample.")
+                sys.exit()
             all_cutoffs[dim].append(cutoff)
     
     return all_cutoffs

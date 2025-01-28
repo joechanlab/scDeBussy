@@ -8,9 +8,10 @@ from tslearn.metrics import dtw_path
 from scipy.optimize import curve_fit
 from ._dba import dtw_barycenter_averaging_with_categories
 from ._utils import split_by_cutpoints, compute_gmm_cutpoints
+import logging
 
 class CellAlignDTW:
-    def __init__(self, df, cluster_ordering, subject_col, score_col, cell_id_col, cell_type_col, verbose=False):
+    def __init__(self, df, cluster_ordering, subject_col, score_col, cell_id_col, cell_type_col, verbose=True):
         self.df = df
         self.cluster_ordering = cluster_ordering
         self.subject_col = subject_col
@@ -21,6 +22,7 @@ class CellAlignDTW:
         self.label_mapping = {label: idx for idx, label in enumerate(cluster_ordering)}
         self.df['numeric_label'] = self.df[cell_type_col].map(self.label_mapping)
         self.verbose = verbose
+        self.logger = logging.getLogger(__name__)
 
     def align(self):
         self.compute_cutoff_points_gmm()
@@ -34,6 +36,7 @@ class CellAlignDTW:
         num_clusters = len(self.cluster_ordering)
         
         for subject in subjects:
+            if self.verbose: self.logger.info(f'Deciding cutoff points for {subject}')
             subject_data = df[df[self.subject_col] == subject]
             X = np.column_stack([
                 subject_data[self.score_col].values,
@@ -42,7 +45,7 @@ class CellAlignDTW:
             cutoff_points[subject] = compute_gmm_cutpoints(X, num_clusters)[0:-1]
         
         self.cutoff_points = cutoff_points
-        if self.verbose: print(cutoff_points)
+        if self.verbose: self.logger.info(f'Cutoff points for each subjects are {cutoff_points}')
 
     def align_with_continuous_barycenter(self):
         aligned_segments = {}
@@ -62,7 +65,7 @@ class CellAlignDTW:
         ])
         
         reference_cutpoints = compute_gmm_cutpoints(X, len(self.cluster_ordering))[0:-1]
-        if self.verbose: print(reference_cutpoints)
+        if self.verbose: self.logger.info(f'Barycenter average transition points cutoffs are {reference_cutpoints}.')
         barycenter_segments = split_by_cutpoints(pd.DataFrame({self.score_col: continuous_barycenter}), reference_cutpoints, self.score_col)
 
         for subject in df[self.subject_col].unique():

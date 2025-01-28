@@ -3,6 +3,11 @@ import pandas as pd
 import numpy as np
 import anndata as ad
 import scipy
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 def calculate_composite_score(df, score_columns):
     # normalize each row to 1
@@ -23,7 +28,7 @@ def remove_outliers(df, columns, threshold=3):
         z_scores = np.abs((df[column] - df[column].mean()) / df[column].std())
         df = df[z_scores < threshold]
     if n - df.shape[0] > 0:
-        print(f'Removed {n - df.shape[0]} outliers from column {columns}...')
+        logger.info(f'Removed {n - df.shape[0]} outliers from column {columns}...')
     return df
 
 def stratified_downsample(df, score_cols, downsample_size, seed=42):
@@ -79,11 +84,11 @@ def create_cellrank_probability_df(adata_paths,
             adata.obs[cell_type_col] = adata.obs[cell_type_col].astype(str).replace('SCLC-[AN]', 'SCLC-AN', regex=True)
         adata.obs['subject'] = subject_name
         if (not all(np.isin(cluster_ordering, adata.obs[cell_type_col].unique()))) or ((not pseudotime_col in adata.obsm.keys()) and (not pseudotime_col in adata.obs.keys())):
-            print(f"Skipping {subject_name} due to missing cell types")
+            logger.info(f"Skipping {subject_name} due to missing cell types")
             continue
         else: 
             subject_ordering.append(subject_name)
-            print(f"Processing {subject_name}")
+            logger.info(f"Processing sample {subject_name}")
             adata = adata[np.isin(adata.obs[cell_type_col], cluster_ordering),:].copy()
             if pseudotime_col == 'term_states_fwd_memberships':
                 df = pd.DataFrame(adata.obsm[pseudotime_col],
@@ -125,7 +130,7 @@ def create_cellrank_probability_df(adata_paths,
             if df.shape[0] > downsample:
                 np.random.seed(seed)
                 df = stratified_downsample(df, 'score', downsample_size=downsample, seed=seed)
-                print(f'Downsampled {subject_name} from {n} to {df.shape[0]} cells')
+                logger.info(f'Downsampled {subject_name} from {n} to {df.shape[0]} cells')
             adata_list.append(adata[df['cell_id'],:])
             df_dict[subject_name] = df
     score_df = pd.concat(df_dict, axis=0)
