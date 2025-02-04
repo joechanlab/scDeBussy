@@ -29,20 +29,21 @@ import CellAlignDTW
 import numpy as np
 import pandas as pd
 n_cells_per_subject = 150
-data = {
+data = pd.DataFrame({
     'subject': np.repeat(['subject1', 'subject2', 'subject3'], 50),
-    'cell_id': [f'cell_{i}' for i in range(n_subjects)],
+    'cell_id': [f'cell_{i}' for i in range(n_cells_per_subject)],
     'score': np.sort(np.random.random((3, 50))).flatten() * 100,
     'cell_type': np.tile(np.repeat(['typeA', 'typeB'], 25), 3)
-}
+})
 cluster_ordering = ['typeA', 'typeB']
-aligner = CellAlignDTW(
+aligner = CellAlignDTW.CellAlignDTW(
         df=data,
         cluster_ordering=cluster_ordering,
         subject_col='subject',
         score_col='score',
         cell_id_col='cell_id',
-        cell_type_col='cell_type'
+        cell_type_col='cell_type',
+        verbose=False
     )
 aligner.align()
 ```
