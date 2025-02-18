@@ -9,10 +9,10 @@ scDeBussy is a Python package for dynamic time warping (DTW)-based pseudotime al
 
 ## Installation
 
-You can install CellAlignDTW locally using pip:
+You can install `scDeBussy` locally using pip:
 
 ```{bash}
-cd CellAlignDTW
+cd scDeBussy
 pip install .
 ```
 
