@@ -1,6 +1,6 @@
-# CellAlignDTW
+# scDeBussy
 
-CellAlignDTW is a Python package for dynamic time warping (DTW)-based pseudotime alignment of single-cell RNA-seq data. It enables robust alignment of temporal or developmental trajectories across different conditions or datasets.
+scDeBussy is a Python package for dynamic time warping (DTW)-based pseudotime alignment of single-cell RNA-seq data. It enables robust alignment of temporal or developmental trajectories across different conditions or datasets.
 
 ## Features
 
@@ -20,7 +20,7 @@ pip install .
 ### Import the package
 
 ```{bash}
-import CellAlignDTW
+import scDeBussy
 ```
 
 ### Align pseudotime trajectories
@@ -36,7 +36,7 @@ data = pd.DataFrame({
     'cell_type': np.tile(np.repeat(['typeA', 'typeB'], 25), 3)
 })
 cluster_ordering = ['typeA', 'typeB']
-aligner = CellAlignDTW.CellAlignDTW(
+aligner = scDeBussy.aligner(
         df=data,
         cluster_ordering=cluster_ordering,
         subject_col='subject',
