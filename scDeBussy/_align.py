@@ -10,7 +10,7 @@ from ._dba import dtw_barycenter_averaging_with_categories
 from ._utils import split_by_cutpoints, compute_gmm_cutpoints
 import logging
 
-class CellAlignDTW:
+class aligner:
     def __init__(self, df, cluster_ordering, subject_col, score_col, cell_id_col, cell_type_col, verbose=True):
         self.df = df
         self.cluster_ordering = cluster_ordering
@@ -63,7 +63,7 @@ class CellAlignDTW:
             continuous_barycenter,
             barycenter_categories
         ])
-        
+        if self.verbose: self.logger.info(f'Deciding cutoff points for the barycenter average...')
         reference_cutpoints = compute_gmm_cutpoints(X, len(self.cluster_ordering))[0:-1]
         if self.verbose: self.logger.info(f'Barycenter average transition points cutoffs are {reference_cutpoints}.')
         barycenter_segments = split_by_cutpoints(pd.DataFrame({self.score_col: continuous_barycenter}), reference_cutpoints, self.score_col)

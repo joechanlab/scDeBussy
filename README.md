@@ -60,4 +60,4 @@ This project is licensed under the GPL-3.0 License.
 
 ## Contact
 
-For questions or feedback, please reach out to [GitHub issues](https://github.com/joechanlab/CellAlignDTW/issues).
+For questions or feedback, please reach out to [GitHub issues](https://github.com/joechanlab/scDeBussy/issues).

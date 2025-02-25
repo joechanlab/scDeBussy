@@ -1,8 +1,8 @@
 import numpy as np
-from CellAlignDTW import CellAlignDTW
+from scDeBussy import scDeBussy
 
-def test_cellaligndtw_initialization(sample_df, cluster_ordering):
-    aligner = CellAlignDTW(
+def test_scDeBussy_initialization(sample_df, cluster_ordering):
+    aligner = scDeBussy(
         df=sample_df,
         cluster_ordering=cluster_ordering,
         subject_col='subject',
@@ -15,8 +15,8 @@ def test_cellaligndtw_initialization(sample_df, cluster_ordering):
     assert aligner.cluster_ordering == cluster_ordering
     assert aligner.cutoff_points is None
 
-def test_cellaligndtw_align(sample_df, cluster_ordering):
-    aligner = CellAlignDTW(
+def test_scDeBussy_align(sample_df, cluster_ordering):
+    aligner = scDeBussy(
         df=sample_df,
         cluster_ordering=cluster_ordering,
         subject_col='subject',

@@ -7,6 +7,7 @@ import tslearn.barycenters.dba as dba
 from tslearn.metrics import dtw_path
 from tslearn.utils import to_time_series_dataset, ts_size
 from tslearn.barycenters.utils import _set_weights
+from ._utils import compute_gmm_cutpoints
 
 def _convert_categorical(Y, verbose=False):
     """Convert categorical variables to numeric if needed and return mapping.
@@ -128,7 +129,6 @@ def _mm_assignment(X, Y, barycenter, weights, metric_params=None):
     list_p_k = []
     list_y_k = []
     dtw_paths = []
-
     for i in range(n):
         path, dist_i = dtw_path(barycenter, X[i], **metric_params)
         cost += dist_i ** 2 * weights[i]
@@ -336,3 +336,215 @@ def dtw_barycenter_averaging_with_categories(X, Y, barycenter_size=None,
         best_categories = label_encoder.inverse_transform(best_categories)
 
     return best_barycenter, best_categories, best_aligned_barycenters
+
+def _initialize_barycenter(X, Y, barycenter_size):
+    """Initialize barycenter and categories through interpolation."""
+    n_dims = len(X[0][0])
+    
+    # Interpolate sequences and categories
+    resampled_x = []
+    resampled_y = []
+    for x, y in zip(X, Y):
+        # Interpolate X values
+        x = np.array(x).reshape(-1, n_dims)
+        indices = np.linspace(0, len(x)-1, barycenter_size)
+        resampled_x.append(np.array([np.interp(indices, range(len(x)), x[:, d]) 
+                                    for d in range(n_dims)]).T)
+        # Interpolate Y values and round to nearest integer
+        resampled_y.append(np.round(np.interp(indices, range(len(y)), y)).astype(int))
+    
+    # Initialize barycenter and categories
+    barycenter = np.mean(resampled_x, axis=0)
+    barycenter_cats = np.round(np.mean(resampled_y, axis=0)).astype(int)
+    
+    return barycenter, barycenter_cats
+
+
+def _compute_all_cutpoints(X, Y_numeric):
+    """Compute GMM cutpoints for all sequences."""
+    all_cutpoints = []
+    for x, y in zip(X, Y_numeric):
+        # Convert x to numpy array if it's a list
+        x = np.array(x) if isinstance(x, list) else x
+        # Stack all dimensions with y
+        data = np.column_stack([x, y])
+        cutpoints = compute_gmm_cutpoints(data, len(np.unique(y)))
+        all_cutpoints.append(cutpoints[0:-1])  # Skip last cutpoint
+    return all_cutpoints
+
+
+def dtw_barycenter_averaging_with_segments(X, Y, barycenter_size=None, 
+                                         max_iter=30, tol=1e-5, weights=None,
+                                         metric_params=None, verbose=False, n_init=1):
+    """Main function for DTW barycenter averaging with segments."""
+    best_cost = np.inf
+    best_barycenter = best_categories = best_aligned = None
+    # Set barycenter size if not specified
+    if barycenter_size is None:
+        barycenter_size = int(np.median([len(x) for x in X]))
+    for i in range(n_init):
+        if verbose:
+            print(f"Initialization {i+1}/{n_init}")
+        # Convert categories and initialize
+        Y_numeric, label_encoder = _convert_categorical(Y, verbose=verbose)
+        barycenter, barycenter_cats = _initialize_barycenter(X, Y_numeric, barycenter_size)
+        all_cutpoints = _compute_all_cutpoints(X, Y_numeric) # note that this is dimension-first
+        prev_cost = np.inf
+        # Main iteration loop
+        for it in range(max_iter):
+            if verbose:
+                print(f"Iteration {it+1}/{max_iter}")
+            # Compute reference cutpoints for barycenter
+            all_y = np.concatenate(Y_numeric)
+            barycenter_data = np.column_stack([barycenter, barycenter_cats])
+            reference_cutpoints = compute_gmm_cutpoints(barycenter_data, len(np.unique(barycenter_cats)))[0:-1]
+            # Align sequences
+            aligned_barycenters = []
+            aligned_categories = []
+            total_cost = 0
+            for x, y, cutpoints in zip(X, Y_numeric, all_cutpoints):
+                # Convert x to numpy array if not already
+                x = np.array(x)
+                # Find split indices for x based on cutpoints
+                split_indices = [] # need to convert to cutpoint first, instead of dimension first
+
+                cutpoints = np.array(cutpoints).T
+                for cutpoint in cutpoints:
+                    # Calculate distances to the cutpoint for each point in x
+                    distances = np.linalg.norm(x - cutpoint, axis=1)
+                    split_idx = np.argmin(distances)
+                    split_indices.append(split_idx)
+                split_indices = sorted(split_indices)
+                # Find split indices for barycenter based on reference cutpoints
+                ref_split_indices = []
+                reference_cutpoints = np.array(reference_cutpoints).T
+                for ref_cutpoint in reference_cutpoints:
+                    distances = np.linalg.norm(barycenter - ref_cutpoint, axis=1)
+                    ref_split_idx = np.argmin(distances)
+                    ref_split_indices.append(ref_split_idx)
+                ref_split_indices = sorted(ref_split_indices)
+                
+                # Process segments
+                prev_idx = 0
+                prev_ref_idx = 0
+                sequence_aligned_values = []
+                sequence_aligned_cats = []
+                sequence_cost = 0
+                # Process all segments
+                for i in range(len(split_indices) + 1):
+                    # Get current segment boundaries
+                    curr_idx = split_indices[i] if i < len(split_indices) else len(x)
+                    curr_ref_idx = ref_split_indices[i] if i < len(ref_split_indices) else len(barycenter)
+                    # Align current segment
+                    aligned_values, aligned_cats, paths, cost = align_segment(
+                        x,
+                        y,
+                        barycenter,
+                        start_idx=prev_ref_idx,
+                        end_idx=curr_ref_idx,
+                        barycenter_start=prev_ref_idx,
+                        barycenter_end=curr_ref_idx,
+                        weights=weights,
+                        metric_params=metric_params,
+                        verbose=verbose
+                    )
+                    sequence_aligned_values.extend(aligned_values)
+                    sequence_aligned_cats.extend(aligned_cats)
+                    sequence_cost += cost
+                    # Update indices for next segment
+                    prev_idx = curr_idx
+                    prev_ref_idx = curr_ref_idx
+                # Store results for this sequence
+                aligned_barycenters.extend(sequence_aligned_values)
+                aligned_categories.extend(sequence_aligned_cats)
+                total_cost += sequence_cost
+            # Update barycenter and categories
+            print(aligned_barycenters)
+            print(aligned_categories)
+            barycenter = np.mean(aligned_barycenters, axis=0)
+            barycenter_cats = np.round(np.mean(aligned_categories, axis=0)).astype(int)
+            # Check convergence
+            if abs(prev_cost - total_cost) < tol:
+                break
+            prev_cost = total_cost
+        # Update best results
+        if total_cost < best_cost:
+            best_cost = total_cost
+            best_barycenter = barycenter
+            best_categories = barycenter_cats
+            best_aligned = aligned_barycenters
+    # Convert categories back if needed
+    if label_encoder is not None:
+        best_categories = label_encoder.inverse_transform(best_categories)
+    return best_barycenter, best_categories, best_aligned
+
+
+def align_segment(X, Y, barycenter, start_idx, end_idx, barycenter_start, barycenter_end,
+                 weights=None, metric_params=None, tie_strategy='first', verbose=False):
+    """Align a single segment using DTW.
+    
+    Parameters
+    ----------
+    X : array-like, shape=(n_ts, sz, d)
+        Segment of time series to align
+    Y : array-like, shape=(n_ts, sz)
+        Categorical variables for the segment
+    barycenter : array-like, shape=(barycenter_sz, d)
+        Reference barycenter segment
+    start_idx, end_idx : int
+        Start and end indices for the input segment
+    barycenter_start, barycenter_end : int
+        Start and end indices for the barycenter segment
+    weights : array-like or None
+        Weights for each sequence
+    metric_params : dict or None
+        DTW parameters
+    tie_strategy : str
+        Strategy for handling ties in categorical voting
+    verbose : bool
+        Whether to print progress information
+    
+    Returns
+    -------
+    aligned_values : list
+        List of aligned barycenter values for each sequence
+    aligned_categories : list
+        List of aligned category values for each sequence
+    dtw_paths : list
+        List of DTW paths for each alignment
+    cost : float
+        Total alignment cost
+    """
+    # Extract segments
+    X_segment = np.array([X[start_idx:end_idx]])
+    Y_segment = np.array([Y[start_idx:end_idx]])
+    barycenter_segment = barycenter[barycenter_start:barycenter_end]
+    
+    # Convert to time series dataset
+    X_segment = to_time_series_dataset(X_segment)
+    weights = _set_weights(weights, X_segment.shape[0])
+    
+    # Single iteration of alignment
+    list_p_k, list_y_k, cost, dtw_paths = _mm_assignment(
+        X_segment, Y_segment, barycenter_segment, 
+        weights, metric_params
+    )
+    
+    # Create aligned values and categories
+    aligned_values = []
+    aligned_categories = []
+    
+    for i, path in enumerate(dtw_paths):
+        # Extract barycenter indices and corresponding values
+        barycenter_indices = [p[0] for p in path]
+        sequence_indices = [p[1] for p in path]
+        
+        # Get aligned barycenter values
+        aligned_value = barycenter_segment[barycenter_indices]
+        aligned_values.append(aligned_value)
+        
+        # Get aligned category values
+        y_seq = Y_segment[0,sequence_indices] if isinstance(Y_segment, np.ndarray) else [Y_segment[0,j] for j in sequence_indices]
+        aligned_categories.append(y_seq)
+    
+    return aligned_values, aligned_categories, dtw_paths, cost

@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 import numpy as np
-from CellAlignDTW._utils import split_by_cutpoints, compute_gmm_cutpoints
+from scDeBussy._utils import split_by_cutpoints, compute_gmm_cutpoints
 
 def test_split_by_cutpoints_single_column():
     # Create sample DataFrame
