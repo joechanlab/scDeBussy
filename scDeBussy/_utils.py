@@ -85,15 +85,23 @@ def compute_gmm_cutpoints(X, n_components):
             idx1, idx2 = sorted_indices[i], sorted_indices[i+1]
             mu1, sigma1 = means[idx1], np.sqrt(gmm.covariances_[idx1][dim,dim])
             mu2, sigma2 = means[idx2], np.sqrt(gmm.covariances_[idx2][dim,dim])
+            lower = min(mu1, mu2) - 2 * max(sigma1, sigma2)
+            upper = max(mu1, mu2) + 2 * max(sigma1, sigma2)
             
             def gaussian_diff(x):
                 return (stats.norm.pdf(x, mu1, sigma1) * gmm.weights_[idx1] - 
                        stats.norm.pdf(x, mu2, sigma2) * gmm.weights_[idx2])
+
+            def posterior_diff(x):
+                p1 = stats.norm.pdf(x, mu1, sigma1) * gmm.weights_[idx1]
+                p2 = stats.norm.pdf(x, mu2, sigma2) * gmm.weights_[idx2]
+                return p1 / (p1 + p2) - 0.5  # Find where probability is equal
             try:
                 cutoff = brentq(gaussian_diff, mu1, mu2)
             except Exception as e:
                 logger.error(f"Unable to determine the pseudotime transition point from cell type {i} to cell type {i + 1}. To find out which sample has this issue, set verbose=True and please check the pseudotime distribution of that sample.")
-                sys.exit()
+                logger.info(f"Using the midpoint as a heuristic fallback.")
+                cutoff = (mu1 + mu2) / 2
             all_cutoffs[dim].append(cutoff)
     
     return all_cutoffs
