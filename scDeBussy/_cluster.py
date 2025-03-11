@@ -178,7 +178,7 @@ def order_genes(df, weight, window_size=10, stride=5):
 
 
 def process_gene_data(scores_df, gene_curve, cell_colors, cutoff_points,
-                      MI_threshold=0, GCV_threshold=1, AIC_threshold=np.Inf, n_clusters=3,
+                      MI_threshold=0, GCV_threshold=1, AIC_threshold=np.inf, n_clusters=3,
                       label_names=None, n_init=5, hierarchical=False, weight=0.5):
     # Filter genes based on thresholds
     is_filtered_genes = scores_df.gene[(scores_df.MI > MI_threshold) & (scores_df.GCV < GCV_threshold) & (scores_df.AIC < AIC_threshold)]

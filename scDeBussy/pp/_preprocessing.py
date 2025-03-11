@@ -71,7 +71,7 @@ def create_cellrank_probability_df(adata_paths,
                                    cluster_ordering,
                                    pseudotime_col,
                                    cellrank_cols_dict=None, 
-                                   downsample=np.Inf,
+                                   downsample=np.inf,
                                    layer=None,
                                    seed=42):
     df_dict = {}
