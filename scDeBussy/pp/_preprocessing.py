@@ -73,6 +73,7 @@ def create_cellrank_probability_df(adata_paths,
                                    cellrank_cols_dict=None, 
                                    downsample=np.inf,
                                    layer=None,
+                                   need_all_clusters=True,
                                    seed=42):
     df_dict = {}
     adata_list = []
@@ -83,14 +84,18 @@ def create_cellrank_probability_df(adata_paths,
         if 'SCLC-AN' in cluster_ordering:
             adata.obs[cell_type_col] = adata.obs[cell_type_col].astype(str).replace('SCLC-[AN]', 'SCLC-AN', regex=True)
         adata.obs['subject'] = subject_name
-        if (not all(np.isin(cluster_ordering, adata.obs[cell_type_col].unique()))) or ((not pseudotime_col in adata.obsm.keys()) and (not pseudotime_col in adata.obs.keys())):
-            logger.info(f"Skipping {subject_name} due to missing cell types")
+        cluster_missing = False
+        if need_all_clusters:
+            cluster_missing = (not all(np.isin(cluster_ordering, adata.obs[cell_type_col].unique())))
+        pseudotime_col_missing = (not any(pseudotime_col in key for key in adata.obsm.keys())) and (not any(pseudotime_col in key for key in adata.obs.keys()))
+        if cluster_missing or pseudotime_col_missing: 
+            logger.info(f"Skipping {subject_name} due to missing cell type or pseudotime column")
             continue
         else: 
             subject_ordering.append(subject_name)
             logger.info(f"Processing sample {subject_name}")
             adata = adata[np.isin(adata.obs[cell_type_col], cluster_ordering),:].copy()
-            if pseudotime_col == 'term_states_fwd_memberships':
+            if 'term_states_fwd_memberships' in pseudotime_col:
                 df = pd.DataFrame(adata.obsm[pseudotime_col],
                                 columns=cellrank_cols_dict[subject_name],
                                 index=adata.obs_names)
@@ -116,7 +121,8 @@ def create_cellrank_probability_df(adata_paths,
                 df = calculate_composite_score(df, cluster_ordering)
 
             elif 'palantir_pseudotime' in pseudotime_col:
-                df = pd.DataFrame(adata.obs[pseudotime_col].values,
+                pseudotime_col_match = [key for key in adata.obs.keys() if pseudotime_col in key][0]
+                df = pd.DataFrame(adata.obs[pseudotime_col_match].values,
                     columns=['score'],
                     index=adata.obs_names)
                 df['subject'] = subject_name
