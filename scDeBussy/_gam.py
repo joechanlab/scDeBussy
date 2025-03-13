@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from pygam import LinearGAM, s, f
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mutual_info_score
 from tqdm import tqdm
 import gc
@@ -10,14 +10,14 @@ def _remove_outliers(df, column, method='zscore', threshold=3):
     z_scores = np.abs((df[column] - df[column].mean()) / df[column].std())
     return df[z_scores < threshold]
 
-def gam_smooth_expression(df, genes, n_splines = 6, lam = 3):
+def gam_smooth_expression(df, genes, subject_col='subject', score_col='aligned_score', n_splines = 6, lam = 3):
     gene_curve = {}
     scores_list = []
     summary_df_list = []
     for i, gene in enumerate(tqdm(genes, desc="Processing genes")):
-        summary_df, aggregated_curve, scores = _gam_smooth_expression(df, gene, n_splines=n_splines, lam=lam)
+        summary_df, aggregated_curve, scores = _gam_smooth_expression(df, gene, subject_col=subject_col, score_col=score_col, n_splines=n_splines, lam=lam)
         if i == 0:
-            gene_curve['aligned_score'] = aggregated_curve['aligned_score']
+            gene_curve[score_col] = aggregated_curve[score_col]
         gene_curve[gene] = aggregated_curve.smoothed
         summary_df['gene'] = gene
         summary_df_list.append(summary_df)
@@ -30,13 +30,12 @@ def gam_smooth_expression(df, genes, n_splines = 6, lam = 3):
     gene_curve = pd.DataFrame(gene_curve)
     return summary_df, gene_curve, scores_df
 
-def _gam_smooth_expression(df, gene, subject_col='subject', score_col='aligned_score', n_splines=6, lam=3):
+def _gam_smooth_expression(df, gene, subject_col, score_col, n_splines=6, lam=3):
     # Remove outliers
     df = df[[subject_col, score_col, gene]]
     df.columns = [subject_col, score_col, 'expression']
     df = _remove_outliers(df.copy(), score_col, method='zscore')
-    scaler = StandardScaler()
-    df['expression'] = df.groupby('subject')['expression'].transform(lambda x: StandardScaler().fit_transform(x.values.reshape(-1, 1)).flatten())
+    df['expression'] = df.groupby('subject')['expression'].transform(lambda x: MinMaxScaler().fit_transform(x.values.reshape(-1, 1)).flatten())
     df.sort_values(by=score_col, inplace=True)
 
     # Extract features and target
