@@ -29,7 +29,7 @@ def plot_sigmoid_fits(aligned_obj):
         ax.legend()
     plt.show()
 
-def plot_summary_curve(summary_df, aggregated_curve, scores, genes, fig_size=(2, 0.8), pt_alpha=0.2, line_alpha=0.5, ylim=[-3, 3]):
+def plot_summary_curve(summary_df, aggregated_curve, scores, genes, fig_size=(2, 0.8), pt_alpha=0.2, line_alpha=0.5, dpi=300):
     """
     Plots summary curves for a list of genes.
 
@@ -40,7 +40,7 @@ def plot_summary_curve(summary_df, aggregated_curve, scores, genes, fig_size=(2,
     genes (list of str): List of gene names to plot.
     """
     num_genes = len(genes)
-    fig, axes = plt.subplots(num_genes, 1, figsize=(fig_size[0], fig_size[1] * num_genes), sharex=True, dpi=600)
+    fig, axes = plt.subplots(num_genes, 1, figsize=(fig_size[0], fig_size[1] * num_genes), sharex=True, dpi=dpi)
 
     if num_genes == 1:
         axes = [axes]  # Ensure axes is iterable if there's only one subplot
@@ -68,7 +68,16 @@ def plot_summary_curve(summary_df, aggregated_curve, scores, genes, fig_size=(2,
         
         # Plot the aggregated curve
         agg_line, = ax.plot(aggregated_curve['aligned_score'], aggregated_curve[gene], color='black', linewidth=2)
-
+        
+        # Calculate ylim based on smoothed values
+        y_min = min(gene_summary['smoothed'])
+        y_max = max(gene_summary['smoothed'])
+        
+        # Add some padding (e.g., 5% of the range)
+        y_range = y_max - y_min
+        padding = 0.05 * y_range
+        ylim = (y_min - padding, y_max + padding)
+        
         ax.set_ylim(ylim)
         ax.set_ylabel('')
         ax.set_xticks([])
@@ -107,7 +116,7 @@ def plot_kshape_clustering(sorted_gene_curve, categories, label_orders=None, alp
 def fit_kde(sorted_gene_curve, df, cell_types, bandwidth=50):
     gene_density = pd.DataFrame(index=sorted_gene_curve.index)
     for cell_type in cell_types:
-        is_cell_type_gene = [cell_type in x if x is not np.nan else False for x in df] # (np.isin(df, cell_type)).astype(int)
+        is_cell_type_gene = [str(cell_type).lower() in str(x).lower() if pd.notna(x) else False for x in df] # (np.isin(df, cell_type)).astype(int)
         x = np.arange(len(is_cell_type_gene)).reshape(-1, 1)
         kde = KernelDensity(bandwidth=bandwidth, kernel='gaussian')
         kde.fit(x, sample_weight=is_cell_type_gene)
@@ -160,8 +169,8 @@ def plot_kde_density(density, title="", clusters=None, cluster_colors=None, name
     plt.tight_layout()
     plt.show()
 
-def plot_kde_density_ridge(density, clusters=None, cluster_colors=None, 
-                           name_map=None, cell_type_order=None, figsize=(6, 4), fontsize=12):
+def plot_kde_density_ridge(density, scores=None, clusters=None, cluster_colors=None, 
+                           name_map=None, cell_type_order=None, figsize=(6, 4), fontsize=12, save_path=None):
     if name_map is not None:
         density.columns = density.columns.map(name_map)
     n_cell_types = len(density.columns)
@@ -177,10 +186,34 @@ def plot_kde_density_ridge(density, clusters=None, cluster_colors=None,
     ordering = density.columns
     if cell_type_order is not None:
         ordering = cell_type_order
+
+    # Create color map for scores
+    if scores is not None:
+        vmin = scores.values.min()  # Use scores min/max instead of density
+        vmax = scores.values.max()
+        norm_scores = (scores - vmin) / (vmax - vmin)
+        cmap = plt.cm.Blues
+
     for i, cell_type in enumerate(ordering):
         if cell_type in density.columns:
-            ax[i].plot(density.index, density[cell_type], label=cell_type)
-            ax[i].fill_between(density.index, density[cell_type], alpha=0.5)
+            x = density.index
+            y = density[cell_type]
+            ax[i].plot(x, y, label=cell_type, color='black')
+            
+            # Create gradient fill based on normalized scores
+            if scores is not None and cell_type in scores.columns:
+                # Get the normalized score for this cell type
+                cell_score = norm_scores[cell_type]
+                # Create array of colors based on the cell type's score
+                colors = cmap(np.full(len(x), cell_score))
+                # Plot vertical strips with the score-based color
+                for j in range(len(x)-1):
+                    ax[i].fill_between(x[j:j+2], y[j:j+2], 
+                                     color=colors[j],
+                                     alpha=0.5)
+            else:
+                ax[i].fill_between(x, y, alpha=0.5, color='lightgray')
+            
             ax[i].set_yticks([])
             ax[i].set_xticks([])
             ax[i].set_xlabel('')
@@ -207,7 +240,15 @@ def plot_kde_density_ridge(density, clusters=None, cluster_colors=None,
             spine.set_visible(False)
         ax[n_rows-1].set_xlabel('Genes', fontsize=fontsize)
     
+    # Add colorbar if scores are provided
+    # if scores is not None:
+    #     sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
+    #     cbar = plt.colorbar(sm, ax=ax, location='right', pad=0.1)
+    #     cbar.set_label('Score', fontsize=fontsize)
+    
     plt.tight_layout()
+    if save_path is not None:
+        plt.savefig(save_path, bbox_inches='tight')
     plt.show()
 
 def plot_kde_heatmap(cluster_colors, cell_types, cell_type_colors, sorted_gene_curve, df_left, density=None, figsize=(4, 8), left_annotation_columns=None, vmin=-3, vmax=3, save_path=None):
