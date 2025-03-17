@@ -12,7 +12,8 @@ setup(
         'matplotlib',
         'scipy',
         'pygam',
-        'tqdm'
+        'tqdm',
+        'gseapy'
     ],
     tests_require=[
         'pytest',
