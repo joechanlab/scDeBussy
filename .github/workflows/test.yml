@@ -38,5 +38,5 @@ jobs:
         pip install .
     
     # Optional step to run tests if available
-    #- name: Run tests
-    #  run: pytest tests/ # Replace 'tests/' with your actual test directory path if applicable
+    - name: Run tests
+      run: pytest tests/ # Replace 'tests/' with your actual test directory path if applicable
