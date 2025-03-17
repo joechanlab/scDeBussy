@@ -13,7 +13,8 @@ setup(
         'scipy',
         'pygam',
         'tqdm',
-        'gseapy'
+        'gseapy',
+        'PyComplexHeatmap'
     ],
     tests_require=[
         'pytest',
