@@ -1,22 +1,25 @@
 # Modified based on https://github.com/tslearn-team/tslearn/blob/5568c026db4b4380b99095827e0573a8f55a81f0/tslearn/barycenters/dba.py
 import warnings
-from sklearn.exceptions import ConvergenceWarning
-from sklearn.preprocessing import LabelEncoder
+
 import numpy as np
 import tslearn.barycenters.dba as dba
+from sklearn.exceptions import ConvergenceWarning
+from sklearn.preprocessing import LabelEncoder
+from tslearn.barycenters.utils import _set_weights
 from tslearn.metrics import dtw_path
 from tslearn.utils import to_time_series_dataset, ts_size
-from tslearn.barycenters.utils import _set_weights
+
 from ._utils import compute_gmm_cutpoints
+
 
 def _convert_categorical(Y, verbose=False):
     """Convert categorical variables to numeric if needed and return mapping.
-    
+
     Parameters
     ----------
     Y : array-like, shape=(n_ts, sz)
         Categorical variables (numeric or non-numeric)
-        
+
     Returns
     -------
     Y_numeric : numpy.array of shape (n_ts, sz)
@@ -25,41 +28,42 @@ def _convert_categorical(Y, verbose=False):
         The encoder used for conversion (None if Y was already numeric)
     """
     # Check if Y is already numeric
-    if hasattr(Y, 'dtype'):
+    if hasattr(Y, "dtype"):
         if np.issubdtype(Y.dtype, np.number):
-            if verbose: print("Y is already numeric categorical. No conversion needed.")
+            if verbose:
+                print("Y is already numeric categorical. No conversion needed.")
             return Y, None
     else:
         # Check if all elements are numeric
         try:
-            if all(isinstance(item, (int, float)) for row in Y for item in row):
-                if verbose: print("Y is already numeric categorical. No conversion needed.")
+            if all(isinstance(item, int | float) for row in Y for item in row):
+                if verbose:
+                    print("Y is already numeric categorical. No conversion needed.")
                 return Y, None
         except TypeError:  # Handle case where items aren't iterable
-            if all(isinstance(item, (int, float)) for item in Y):
-                if verbose: print("Y is already numeric categorical. No conversion needed.")
+            if all(isinstance(item, int | float) for item in Y):
+                if verbose:
+                    print("Y is already numeric categorical. No conversion needed.")
                 return Y, None
-    
+
     # Convert non-numeric categories to numeric
     label_encoder = LabelEncoder()
     Y_flat = [item for row in Y for item in row]
     label_encoder.fit(Y_flat)
-    Y_numeric = [
-        [label_encoder.transform([item])[0] for item in row]
-        for row in Y
-    ]
+    Y_numeric = [[label_encoder.transform([item])[0] for item in row] for row in Y]
 
     # Print mapping
-    if verbose: 
+    if verbose:
         print("Category mapping:")
         for i, category in enumerate(label_encoder.classes_):
             print(f"  {category} -> {i}")
-    
+
     return Y_numeric, label_encoder
 
-def _handle_majority_vote(values, weights=None, tie_strategy='first'):
+
+def _handle_majority_vote(values, weights=None, tie_strategy="first"):
     """Handle majority voting with explicit tie handling.
-    
+
     Parameters
     ----------
     values : array-like
@@ -72,7 +76,7 @@ def _handle_majority_vote(values, weights=None, tie_strategy='first'):
         - 'random': Randomly select among tied values
         - 'weighted_random': Randomly select among tied values with weights
         - 'report': Return all tied values
-    
+
     Returns
     -------
     result : scalar or array
@@ -82,40 +86,40 @@ def _handle_majority_vote(values, weights=None, tie_strategy='first'):
     """
     if not values:
         return None, False
-        
+
     values = np.array(values)
     if weights is None:
         weights = np.ones(len(values))
     weights = np.array(weights)
-    
+
     # Get unique values and their weighted counts
     unique_vals, counts = np.unique(values, return_counts=True)
     weighted_counts = np.zeros_like(counts, dtype=float)
-    
+
     for i, val in enumerate(unique_vals):
         mask = np.where(values == val)[0]
         weighted_counts[i] = np.sum(weights[mask])
-    
+
     # Find maximum count and check for ties
     max_count = np.max(weighted_counts)
     tied_indices = np.where(weighted_counts == max_count)[0]
     is_tie = len(tied_indices) > 1
     tied_values = unique_vals[tied_indices]
-    
-    if not is_tie or tie_strategy == 'first':
+
+    if not is_tie or tie_strategy == "first":
         return tied_values[0], is_tie
-    
-    elif tie_strategy == 'random':
+
+    elif tie_strategy == "random":
         return np.random.choice(tied_values), is_tie
-    
-    elif tie_strategy == 'weighted_random':
+
+    elif tie_strategy == "weighted_random":
         tied_weights = weighted_counts[tied_indices]
         tied_weights = tied_weights / tied_weights.sum()  # Normalize weights
         return np.random.choice(tied_values, p=tied_weights), is_tie
-    
-    elif tie_strategy == 'report':
+
+    elif tie_strategy == "report":
         return tied_values, is_tie
-    
+
     else:
         raise ValueError(f"Unknown tie_strategy: {tie_strategy}")
 
@@ -125,13 +129,13 @@ def _mm_assignment(X, Y, barycenter, weights, metric_params=None):
     if metric_params is None:
         metric_params = {}
     n = X.shape[0]
-    cost = 0.
+    cost = 0.0
     list_p_k = []
     list_y_k = []
     dtw_paths = []
     for i in range(n):
         path, dist_i = dtw_path(barycenter, X[i], **metric_params)
-        cost += dist_i ** 2 * weights[i]
+        cost += dist_i**2 * weights[i]
         list_p_k.append(path)
         dtw_paths.append(path)
         y_aligned = [(i, path_point[1]) for path_point in path]
@@ -139,18 +143,20 @@ def _mm_assignment(X, Y, barycenter, weights, metric_params=None):
     cost /= weights.sum()
     return list_p_k, list_y_k, cost, dtw_paths
 
-def _mm_update_barycenter_with_categories(X, Y, diag_sum_v_k, list_w_k, list_y_k,
-                                    weights, tie_strategy='first', verbose=False):
+
+def _mm_update_barycenter_with_categories(
+    X, Y, diag_sum_v_k, list_w_k, list_y_k, weights, tie_strategy="first", verbose=False
+):
     """Update barycenter and determine majority categories"""
     d = X.shape[2]
     barycenter_size = diag_sum_v_k.shape[0]
-    
+
     # Update numerical values (original logic)
     sum_w_x = np.zeros((barycenter_size, d))
-    for k, (w_k, x_k) in enumerate(zip(list_w_k, X)):
-        sum_w_x += w_k.dot(x_k[:ts_size(x_k)])
-    barycenter = np.diag(1. / diag_sum_v_k).dot(sum_w_x)
-    
+    for w_k, x_k in zip(list_w_k, X, strict=False):
+        sum_w_x += w_k.dot(x_k[: ts_size(x_k)])
+    barycenter = np.diag(1.0 / diag_sum_v_k).dot(sum_w_x)
+
     # Determine majority categories for each time point
     categories = np.zeros(barycenter_size, dtype=int)
     for t in range(barycenter_size):
@@ -162,33 +168,35 @@ def _mm_update_barycenter_with_categories(X, Y, diag_sum_v_k, list_w_k, list_y_k
                 if time_idx == t:
                     y_values.append(Y[idx][time_idx])
                     y_weights.append(weights[idx])
-                    
+
         # Get majority vote if we have any alignments
         if y_values:
-            category, is_tie = _handle_majority_vote(
-                y_values, 
-                weights=y_weights,
-                tie_strategy=tie_strategy
-            )
-            
+            category, is_tie = _handle_majority_vote(y_values, weights=y_weights, tie_strategy=tie_strategy)
+
             if verbose and is_tie:
                 print(f"Tie detected at time point {t}: {category}")
-                
+
             # Handle multiple categories if tie_strategy is 'report'
             if isinstance(category, np.ndarray):
                 categories[t] = category[0]  # Take first value if array
             else:
-                categories[t] = category 
-            
+                categories[t] = category
+
     return barycenter, categories
 
-def dtw_barycenter_averaging_with_categories_one_init(X, Y, barycenter_size=None,
-                                                     init_barycenter=None,
-                                                     max_iter=30, tol=1e-5, 
-                                                     weights=None,
-                                                     metric_params=None,
-                                                     tie_strategy='first',
-                                                     verbose=False):
+
+def dtw_barycenter_averaging_with_categories_one_init(
+    X,
+    Y,
+    barycenter_size=None,
+    init_barycenter=None,
+    max_iter=30,
+    tol=1e-5,
+    weights=None,
+    metric_params=None,
+    tie_strategy="first",
+    verbose=False,
+):
     """Single initialization version of DBA with categories"""
     X_ = to_time_series_dataset(X)
     if barycenter_size is None:
@@ -199,31 +207,32 @@ def dtw_barycenter_averaging_with_categories_one_init(X, Y, barycenter_size=None
     else:
         barycenter_size = init_barycenter.shape[0]
         barycenter = init_barycenter
-        
+
     cost_prev, cost = np.inf, np.inf
     categories = None
     final_dtw_paths = None
-    
+
     for it in range(max_iter):
         # Modified to include Y in the assignment
-        list_p_k, list_y_k, cost, dtw_paths = _mm_assignment(X_, Y, barycenter, weights, 
-                                                 metric_params)
-        diag_sum_v_k, list_w_k = dba._mm_valence_warping(list_p_k, barycenter_size,
-                                                     weights)
+        list_p_k, list_y_k, cost, dtw_paths = _mm_assignment(X_, Y, barycenter, weights, metric_params)
+        diag_sum_v_k, list_w_k = dba._mm_valence_warping(list_p_k, barycenter_size, weights)
         if verbose:
-            print("[DBA] epoch %d, cost: %.3f" % (it + 1, cost))
-            
+            print(f"[DBA] epoch {it + 1}, cost: {cost:.3f}")
+
         # Update both barycenter and categories
         barycenter, categories = _mm_update_barycenter_with_categories(
             X_, Y, diag_sum_v_k, list_w_k, list_y_k, weights=weights, tie_strategy=tie_strategy, verbose=verbose
         )
-        
+
         if abs(cost_prev - cost) < tol:
             final_dtw_paths = dtw_paths
             break
         elif cost_prev < cost:
-            warnings.warn("DBA loss is increasing while it should not be. "
-                        "Stopping optimization.", ConvergenceWarning)
+            warnings.warn(
+                "DBA loss is increasing while it should not be. Stopping optimization.",
+                ConvergenceWarning,
+                stacklevel=2,
+            )
             final_dtw_paths = dtw_paths
             break
         else:
@@ -237,16 +246,25 @@ def dtw_barycenter_averaging_with_categories_one_init(X, Y, barycenter_size=None
         # Get aligned barycenter values
         aligned_barycenter = barycenter[barycenter_indices]
         aligned_barycenters.append(aligned_barycenter)
-    
+
     return barycenter, categories, cost, aligned_barycenters
 
-def dtw_barycenter_averaging_with_categories(X, Y, barycenter_size=None, 
-                                           init_barycenter=None, max_iter=30, 
-                                           tol=1e-5, weights=None,
-                                           metric_params=None, verbose=False, 
-                                           n_init=1, tie_strategy='first'):
+
+def dtw_barycenter_averaging_with_categories(
+    X,
+    Y,
+    barycenter_size=None,
+    init_barycenter=None,
+    max_iter=30,
+    tol=1e-5,
+    weights=None,
+    metric_params=None,
+    verbose=False,
+    n_init=1,
+    tie_strategy="first",
+):
     """Modified DBA to also handle categorical variables.
-    
+
     Parameters
     ----------
     X : array-like, shape=(n_ts, sz, d)
@@ -254,7 +272,7 @@ def dtw_barycenter_averaging_with_categories(X, Y, barycenter_size=None,
 
     Y : array-like, shape=(n_ts, sz)
         Categorical variables for each time point
-    
+
     barycenter_size : int or None (default: None)
         Size of the barycenter to generate. If None, the size of the barycenter
         is that of the data provided at fit
@@ -296,7 +314,7 @@ def dtw_barycenter_averaging_with_categories(X, Y, barycenter_size=None,
         - 'random': Randomly select among tied values
         - 'weighted_random': Randomly select among tied values with weights
         - 'report': Report all tied values
-    
+
     Returns
     -------
     tuple (barycenter, categories)
@@ -306,14 +324,14 @@ def dtw_barycenter_averaging_with_categories(X, Y, barycenter_size=None,
             Majority vote categories for each time point
     """
     Y_numeric, label_encoder = _convert_categorical(Y, verbose=verbose)
-    
+
     best_cost = np.inf
     best_barycenter = None
     best_categories = None
-    
+
     for i in range(n_init):
         if verbose:
-            print("Attempt {}".format(i + 1))
+            print(f"Attempt {i + 1}")
         bary, cats, loss, aligned_bary = dtw_barycenter_averaging_with_categories_one_init(
             X=X,
             Y=Y_numeric,
@@ -324,46 +342,46 @@ def dtw_barycenter_averaging_with_categories(X, Y, barycenter_size=None,
             weights=weights,
             metric_params=metric_params,
             tie_strategy=tie_strategy,
-            verbose=verbose
+            verbose=verbose,
         )
         if loss < best_cost:
             best_cost = loss
             best_barycenter = bary
             best_categories = cats
             best_aligned_barycenters = aligned_bary
-    
+
     if label_encoder is not None:
         best_categories = label_encoder.inverse_transform(best_categories)
 
     return best_barycenter, best_categories, best_aligned_barycenters
 
+
 def _initialize_barycenter(X, Y, barycenter_size):
     """Initialize barycenter and categories through interpolation."""
     n_dims = len(X[0][0])
-    
+
     # Interpolate sequences and categories
     resampled_x = []
     resampled_y = []
-    for x, y in zip(X, Y):
+    for x, y in zip(X, Y, strict=False):
         # Interpolate X values
         x = np.array(x).reshape(-1, n_dims)
-        indices = np.linspace(0, len(x)-1, barycenter_size)
-        resampled_x.append(np.array([np.interp(indices, range(len(x)), x[:, d]) 
-                                    for d in range(n_dims)]).T)
+        indices = np.linspace(0, len(x) - 1, barycenter_size)
+        resampled_x.append(np.array([np.interp(indices, range(len(x)), x[:, d]) for d in range(n_dims)]).T)
         # Interpolate Y values and round to nearest integer
         resampled_y.append(np.round(np.interp(indices, range(len(y)), y)).astype(int))
-    
+
     # Initialize barycenter and categories
     barycenter = np.mean(resampled_x, axis=0)
     barycenter_cats = np.round(np.mean(resampled_y, axis=0)).astype(int)
-    
+
     return barycenter, barycenter_cats
 
 
 def _compute_all_cutpoints(X, Y_numeric):
     """Compute GMM cutpoints for all sequences."""
     all_cutpoints = []
-    for x, y in zip(X, Y_numeric):
+    for x, y in zip(X, Y_numeric, strict=False):
         # Convert x to numpy array if it's a list
         x = np.array(x) if isinstance(x, list) else x
         # Stack all dimensions with y
@@ -373,9 +391,9 @@ def _compute_all_cutpoints(X, Y_numeric):
     return all_cutpoints
 
 
-def dtw_barycenter_averaging_with_segments(X, Y, barycenter_size=None, 
-                                         max_iter=30, tol=1e-5, weights=None,
-                                         metric_params=None, verbose=False, n_init=1):
+def dtw_barycenter_averaging_with_segments(
+    X, Y, barycenter_size=None, max_iter=30, tol=1e-5, weights=None, metric_params=None, verbose=False, n_init=1
+):
     """Main function for DTW barycenter averaging with segments."""
     best_cost = np.inf
     best_barycenter = best_categories = best_aligned = None
@@ -384,29 +402,28 @@ def dtw_barycenter_averaging_with_segments(X, Y, barycenter_size=None,
         barycenter_size = int(np.median([len(x) for x in X]))
     for i in range(n_init):
         if verbose:
-            print(f"Initialization {i+1}/{n_init}")
+            print(f"Initialization {i + 1}/{n_init}")
         # Convert categories and initialize
         Y_numeric, label_encoder = _convert_categorical(Y, verbose=verbose)
         barycenter, barycenter_cats = _initialize_barycenter(X, Y_numeric, barycenter_size)
-        all_cutpoints = _compute_all_cutpoints(X, Y_numeric) # note that this is dimension-first
+        all_cutpoints = _compute_all_cutpoints(X, Y_numeric)  # note that this is dimension-first
         prev_cost = np.inf
         # Main iteration loop
         for it in range(max_iter):
             if verbose:
-                print(f"Iteration {it+1}/{max_iter}")
+                print(f"Iteration {it + 1}/{max_iter}")
             # Compute reference cutpoints for barycenter
-            all_y = np.concatenate(Y_numeric)
             barycenter_data = np.column_stack([barycenter, barycenter_cats])
             reference_cutpoints = compute_gmm_cutpoints(barycenter_data, len(np.unique(barycenter_cats)))[0:-1]
             # Align sequences
             aligned_barycenters = []
             aligned_categories = []
             total_cost = 0
-            for x, y, cutpoints in zip(X, Y_numeric, all_cutpoints):
+            for x, y, cutpoints in zip(X, Y_numeric, all_cutpoints, strict=False):
                 # Convert x to numpy array if not already
                 x = np.array(x)
                 # Find split indices for x based on cutpoints
-                split_indices = [] # need to convert to cutpoint first, instead of dimension first
+                split_indices = []  # need to convert to cutpoint first, instead of dimension first
 
                 cutpoints = np.array(cutpoints).T
                 for cutpoint in cutpoints:
@@ -423,17 +440,15 @@ def dtw_barycenter_averaging_with_segments(X, Y, barycenter_size=None,
                     ref_split_idx = np.argmin(distances)
                     ref_split_indices.append(ref_split_idx)
                 ref_split_indices = sorted(ref_split_indices)
-                
+
                 # Process segments
-                prev_idx = 0
                 prev_ref_idx = 0
                 sequence_aligned_values = []
                 sequence_aligned_cats = []
                 sequence_cost = 0
                 # Process all segments
                 for i in range(len(split_indices) + 1):
-                    # Get current segment boundaries
-                    curr_idx = split_indices[i] if i < len(split_indices) else len(x)
+                    # Get current segment boundaries\
                     curr_ref_idx = ref_split_indices[i] if i < len(ref_split_indices) else len(barycenter)
                     # Align current segment
                     aligned_values, aligned_cats, paths, cost = align_segment(
@@ -446,13 +461,12 @@ def dtw_barycenter_averaging_with_segments(X, Y, barycenter_size=None,
                         barycenter_end=curr_ref_idx,
                         weights=weights,
                         metric_params=metric_params,
-                        verbose=verbose
+                        verbose=verbose,
                     )
                     sequence_aligned_values.extend(aligned_values)
                     sequence_aligned_cats.extend(aligned_cats)
                     sequence_cost += cost
                     # Update indices for next segment
-                    prev_idx = curr_idx
                     prev_ref_idx = curr_ref_idx
                 # Store results for this sequence
                 aligned_barycenters.extend(sequence_aligned_values)
@@ -479,10 +493,21 @@ def dtw_barycenter_averaging_with_segments(X, Y, barycenter_size=None,
     return best_barycenter, best_categories, best_aligned
 
 
-def align_segment(X, Y, barycenter, start_idx, end_idx, barycenter_start, barycenter_end,
-                 weights=None, metric_params=None, tie_strategy='first', verbose=False):
+def align_segment(
+    X,
+    Y,
+    barycenter,
+    start_idx,
+    end_idx,
+    barycenter_start,
+    barycenter_end,
+    weights=None,
+    metric_params=None,
+    tie_strategy="first",
+    verbose=False,
+):
     """Align a single segment using DTW.
-    
+
     Parameters
     ----------
     X : array-like, shape=(n_ts, sz, d)
@@ -503,7 +528,7 @@ def align_segment(X, Y, barycenter, start_idx, end_idx, barycenter_start, baryce
         Strategy for handling ties in categorical voting
     verbose : bool
         Whether to print progress information
-    
+
     Returns
     -------
     aligned_values : list
@@ -519,32 +544,35 @@ def align_segment(X, Y, barycenter, start_idx, end_idx, barycenter_start, baryce
     X_segment = np.array([X[start_idx:end_idx]])
     Y_segment = np.array([Y[start_idx:end_idx]])
     barycenter_segment = barycenter[barycenter_start:barycenter_end]
-    
+
     # Convert to time series dataset
     X_segment = to_time_series_dataset(X_segment)
     weights = _set_weights(weights, X_segment.shape[0])
-    
+
     # Single iteration of alignment
     list_p_k, list_y_k, cost, dtw_paths = _mm_assignment(
-        X_segment, Y_segment, barycenter_segment, 
-        weights, metric_params
+        X_segment, Y_segment, barycenter_segment, weights, metric_params
     )
-    
+
     # Create aligned values and categories
     aligned_values = []
     aligned_categories = []
-    
-    for i, path in enumerate(dtw_paths):
+
+    for path in dtw_paths:
         # Extract barycenter indices and corresponding values
         barycenter_indices = [p[0] for p in path]
         sequence_indices = [p[1] for p in path]
-        
+
         # Get aligned barycenter values
         aligned_value = barycenter_segment[barycenter_indices]
         aligned_values.append(aligned_value)
-        
+
         # Get aligned category values
-        y_seq = Y_segment[0,sequence_indices] if isinstance(Y_segment, np.ndarray) else [Y_segment[0,j] for j in sequence_indices]
+        y_seq = (
+            Y_segment[0, sequence_indices]
+            if isinstance(Y_segment, np.ndarray)
+            else [Y_segment[0, j] for j in sequence_indices]
+        )
         aligned_categories.append(y_seq)
-    
+
     return aligned_values, aligned_categories, dtw_paths, cost
