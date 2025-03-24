@@ -26,6 +26,11 @@ dependencies = [
   "anndata",
   # for debug logging (referenced from the issue template)
   "session-info2",
+  "scanpy",
+  "tslearn",
+  "pygam",
+  "gseapy",
+  "PyComplexHeatmap"
 ]
 optional-dependencies.dev = [
   "pre-commit",
