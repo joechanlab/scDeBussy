@@ -3,7 +3,7 @@ import numpy as np
 import seaborn as sns
 from scipy.cluster.hierarchy import linkage, leaves_list
 from sklearn.cluster import AgglomerativeClustering
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from tslearn.clustering import KShape, KernelKMeans
 from collections import defaultdict
 import gseapy as gp
@@ -31,6 +31,11 @@ def max_idx(x, window_size):
     rolling_mean = x.rolling(window=window_size).mean()
     max_index = rolling_mean.idxmax()
     return max_index
+
+def center_of_mass(vector):
+    """Compute weighted center of mass for a 1D vector."""
+    positions = np.arange(len(vector))  # Index positions
+    return np.sum(vector * positions) / np.sum(vector)
 
 def categorize_values(X, Y):
     result = []
@@ -129,7 +134,7 @@ def mean_around_max(time_series, num_elements):
     return argmax_position, mean
 
 
-def find_max(time_series, max_position, weight):
+def find_max(time_series, weight):
     """
     Computes a composite score for a time series based on the location of the maximum value 
     and the mean of surrounding values, weighted by a user-specified parameter.
@@ -145,11 +150,12 @@ def find_max(time_series, max_position, weight):
                the mean of surrounding values, weighted by the user-specified parameter.
     """
     # Compute the position of the maximum value and the mean of surrounding elements
-    argmax_position, mean = mean_around_max(time_series, 100)
+    max_position = len(time_series)
+    argmax_position, mean = mean_around_max(time_series, max_position//2)
     composite_score = argmax_position * (1 - weight) + mean * weight * np.sign(0.5 - argmax_position/max_position)
     return composite_score
 
-def order_genes(df, weight, window_size=10, stride=5):
+def order_genes(df, weight, window_size=10, stride=10):
     """
     Orders genes in a DataFrame based on the maximum location and mean of their expression profiles.
     
@@ -166,8 +172,7 @@ def order_genes(df, weight, window_size=10, stride=5):
     
     for row_idx, expression in df.iterrows():
         binned_averages = bin_and_average_time_series(expression.values, window_size, stride)
-        max_position = len(binned_averages)
-        composite_score = find_max(binned_averages, max_position, weight=weight)
+        composite_score = find_max(binned_averages, weight=weight)
         max_indices.append((row_idx, composite_score))
     
     # Sort by the composite score and extract row positions

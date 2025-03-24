@@ -189,7 +189,8 @@ def plot_kde_density_ridge(density, scores=None, clusters=None, cluster_colors=N
 
     # Create color map for scores
     if scores is not None:
-        vmin = scores.values.min()  # Use scores min/max instead of density
+        scores = scores.fillna(0)  # Fill NA values with 0
+        vmin = 0
         vmax = scores.values.max()
         norm_scores = (scores - vmin) / (vmax - vmin)
         cmap = plt.cm.Blues
@@ -200,19 +201,21 @@ def plot_kde_density_ridge(density, scores=None, clusters=None, cluster_colors=N
             y = density[cell_type]
             ax[i].plot(x, y, label=cell_type, color='black')
             
-            # Create gradient fill based on normalized scores
+            # Create gradient fill
             if scores is not None and cell_type in scores.columns:
-                # Get the normalized score for this cell type
                 cell_score = norm_scores[cell_type]
-                # Create array of colors based on the cell type's score
-                colors = cmap(np.full(len(x), cell_score))
-                # Plot vertical strips with the score-based color
-                for j in range(len(x)-1):
-                    ax[i].fill_between(x[j:j+2], y[j:j+2], 
-                                     color=colors[j],
-                                     alpha=0.5)
+                # Default fill with white for zero/NA values
+                ax[i].fill_between(x, y, color='white', alpha=0.5)
+                
+                # Only color non-zero scores
+                if any(cell_score > 0):  # or use a small threshold like 0.01
+                    colors = cmap(np.full(len(x), cell_score))
+                    for j in range(len(x)-1):
+                        ax[i].fill_between(x[j:j+2], y[j:j+2], 
+                                         color=colors[j],
+                                         alpha=0.8)  # Increased alpha for better visibility
             else:
-                ax[i].fill_between(x, y, alpha=0.5, color='lightgray')
+                ax[i].fill_between(x, y, color='white', alpha=0.5)
             
             ax[i].set_yticks([])
             ax[i].set_xticks([])
