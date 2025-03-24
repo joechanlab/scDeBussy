@@ -25,7 +25,7 @@ If you don't have Python installed, we recommend installing [uv][].
 
 Install the latest development version `scDeBussy`
 
-```{bash}
+```
 pip install git+https://github.com/joechanlab/scDeBussy.git@main
 ```
 
