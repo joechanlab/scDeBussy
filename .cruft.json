@@ -1,0 +1,31 @@
+{
+  "template": "https://github.com/scverse/cookiecutter-scverse",
+  "commit": "55414a88b2ba65b2baf0e1c4c39f6532a7655560",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "project_name": "scDeBussy",
+      "package_name": "scdebussy",
+      "project_description": "Dynamic time warping-based pseudotime alignment of scRNA-seq data",
+      "author_full_name": "Mamie Wang",
+      "author_email": "wangm10@mskcc.org",
+      "github_user": "joechanlab",
+      "github_repo": "scDeBussy",
+      "license": "MIT License",
+      "ide_integration": true,
+      "_copy_without_render": [
+        ".github/workflows/build.yaml",
+        ".github/workflows/test.yaml",
+        "docs/_templates/autosummary/**.rst"
+      ],
+      "_render_devdocs": false,
+      "_jinja2_env_vars": {
+        "lstrip_blocks": true,
+        "trim_blocks": true
+      },
+      "_template": "https://github.com/scverse/cookiecutter-scverse",
+      "_commit": "55414a88b2ba65b2baf0e1c4c39f6532a7655560"
+    }
+  },
+  "directory": null
+}
