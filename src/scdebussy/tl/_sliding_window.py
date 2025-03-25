@@ -67,7 +67,7 @@ def calculate_max_position(pivot_df_lor):
     return pivot_df_lor.sort_values(by="Max_Position").drop(columns=["Max_Position"])
 
 
-def plot_heatmap(pivot_df_lor_sorted):
+def plot_heatmap(pivot_df_lor_sorted, save_path=None):
     """Plot the heatmap for the sorted DataFrame."""
     plt.figure(figsize=(5, len(pivot_df_lor_sorted) * 0.2))  # Adjust height based on number of rows
 
@@ -80,8 +80,6 @@ def plot_heatmap(pivot_df_lor_sorted):
         show_rownames=True,
         row_split_gap=1,
         cmap="Spectral_r",
-        vmin=-2,
-        vmax=2,
     )
 
     # Get the heatmap's axis and adjust y-axis labels
@@ -94,18 +92,20 @@ def plot_heatmap(pivot_df_lor_sorted):
     ax.set_ylabel("Gene Set")
     ax.set_title("Gene Set Enrichment Across Sliding Windows", pad=20)
 
-    # Adjust layout to prevent label clipping
+    if save_path:
+        plt.savefig(save_path, bbox_inches="tight")
+
     plt.tight_layout()
     plt.show()
 
 
-def analyze_and_plot_enrichment(results_df, p_threshold=1e-4, or_threshold=5, exclude_gene_sets=None):
+def analyze_and_plot_enrichment(results_df, p_threshold=1e-4, or_threshold=5, exclude_gene_sets=None, save_path=None):
     """Main function to analyze and plot enrichment."""
     pivot_df_p, pivot_df_or = pivot_results(results_df, p_threshold, or_threshold, exclude_gene_sets)
     pivot_df_lor, num_significant = calculate_significant_gene_sets(pivot_df_or, pivot_df_p)
     pivot_df_lor_sorted = calculate_max_position(pivot_df_lor)
     print(num_significant)  # Print the number of significant gene sets
-    plot_heatmap(pivot_df_lor_sorted)
+    plot_heatmap(pivot_df_lor_sorted, save_path=save_path)
 
 
 def rbf_kernel(x, y, gamma):
