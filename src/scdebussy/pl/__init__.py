@@ -1,4 +1,5 @@
 from ._plot import (
+    align_pseudotime,
     fit_kde,
     plot_gene_clusters,
     plot_kde_density,

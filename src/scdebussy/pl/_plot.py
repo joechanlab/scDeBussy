@@ -5,9 +5,68 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import PyComplexHeatmap as pch
+import scanpy as sc
 import seaborn as sns
 from matplotlib.colors import LinearSegmentedColormap, LogNorm
 from sklearn.neighbors import KernelDensity
+
+
+def align_pseudotime(
+    adata, gene, color, pseudotime_key="aligned_pseudotime", barycenter_key="barycenter", dot_size=100
+):
+    """
+    Plots individual cell gene expression along mapped aligned pseudotime and barycenter.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Input AnnData object.
+    gene : str
+        The gene to plot.
+    pseudotime_key : str, optional
+        Column in `adata.obs` containing mapped aligned pseudotime (default: "aligned_pseudotime").
+    barycenter_key : str, optional
+        Key in `adata.uns` where barycenter expression and aligned pseudotime are stored (default: "barycenter").
+    dot_size : int, optional
+        Size of the dots in the scatter plot (default: 10).
+
+    Returns
+    -------
+    None
+        Displays the plot.
+    """
+    if pseudotime_key not in adata.obs:
+        raise ValueError(f"{pseudotime_key} not found in adata.obs. Run mapping first.")
+
+    if barycenter_key not in adata.uns or "aligned_pseudotime" not in adata.uns[barycenter_key]:
+        raise ValueError(f"{barycenter_key} does not contain expected barycenter expression data.")
+
+    if gene not in adata.var_names:
+        raise ValueError(f"Gene {gene} not found in adata.var_names.")
+
+    if gene not in adata.uns[barycenter_key]["expression"]:
+        raise ValueError(f"Gene {gene} not found in barycenter expression.")
+
+    # Create figure and axis
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    # Scatter plot of individual cell expression values with controlled dot size
+    sc.pl.scatter(adata, x=pseudotime_key, y=gene, color=color, ax=ax, size=dot_size, show=False)
+
+    # Overlay barycenter expression line
+    ax.plot(
+        adata.uns[barycenter_key]["aligned_pseudotime"],
+        adata.uns[barycenter_key]["expression"][gene],
+        color="red",
+        label="Barycenter",
+    )
+
+    # Add legend and adjust its properties
+    ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))  # Position legend to the right
+    ax.set_title(f"Aligned Gene Expression: {gene}")
+
+    # Show the plot
+    plt.show()
 
 
 def plot_sigmoid_fits(aligned_obj):
