@@ -18,6 +18,7 @@
 
 .. autosummary::
     :toctree: generated
+    scdebussy.tl.align_pseudotime
 ```
 
 ## Plotting
@@ -28,4 +29,5 @@
 
 .. autosummary::
     :toctree: generated
+    scdebussy.pl.align_pseudotime
 ```
