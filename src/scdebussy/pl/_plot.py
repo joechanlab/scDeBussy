@@ -1,5 +1,6 @@
 import itertools
 
+import anndata
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,28 +13,37 @@ from sklearn.neighbors import KernelDensity
 
 
 def align_pseudotime(
-    adata, gene, color, pseudotime_key="aligned_pseudotime", barycenter_key="barycenter", dot_size=100
-):
-    """
-    Plots individual cell gene expression along mapped aligned pseudotime and barycenter.
+    adata: "anndata.AnnData",
+    gene: str,
+    color: str,
+    pseudotime_key: str = "aligned_pseudotime",
+    barycenter_key: str = "barycenter",
+    dot_size: int = 100,
+) -> None:
+    """Plot gene expression along aligned pseudotime with barycenter curve.
 
     Parameters
     ----------
-    adata : AnnData
+    adata
         Input AnnData object.
-    gene : str
+    gene
         The gene to plot.
-    pseudotime_key : str, optional
-        Column in `adata.obs` containing mapped aligned pseudotime (default: "aligned_pseudotime").
-    barycenter_key : str, optional
-        Key in `adata.uns` where barycenter expression and aligned pseudotime are stored (default: "barycenter").
-    dot_size : int, optional
-        Size of the dots in the scatter plot (default: 10).
+    color
+        Color key for the scatter plot.
+    pseudotime_key
+        Column in `adata.obs` containing mapped aligned pseudotime.
+        Defaults to "aligned_pseudotime".
+    barycenter_key
+        Key in `adata.uns` containing barycenter data.
+        Defaults to "barycenter".
+    dot_size
+        Size of scatter plot dots.
+        Defaults to 100.
 
-    Returns
-    -------
-    None
-        Displays the plot.
+    Raises
+    ------
+    ValueError
+        If required data is missing from the AnnData object.
     """
     if pseudotime_key not in adata.obs:
         raise ValueError(f"{pseudotime_key} not found in adata.obs. Run mapping first.")
@@ -50,7 +60,7 @@ def align_pseudotime(
     # Create figure and axis
     fig, ax = plt.subplots(figsize=(6, 4))
 
-    # Scatter plot of individual cell expression values with controlled dot size
+    # Scatter plot of individual cell expression values
     sc.pl.scatter(adata, x=pseudotime_key, y=gene, color=color, ax=ax, size=dot_size, show=False)
 
     # Overlay barycenter expression line
@@ -61,47 +71,77 @@ def align_pseudotime(
         label="Barycenter",
     )
 
-    # Add legend and adjust its properties
-    ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))  # Position legend to the right
+    ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))
     ax.set_title(f"Aligned Gene Expression: {gene}")
-
-    # Show the plot
     plt.show()
 
 
-def plot_sigmoid_fits(aligned_obj):
+def plot_sigmoid_fits(
+    aligned_obj,
+):
+    """Plot sigmoid fits for each subject in the aligned object.
+
+    Args:
+        aligned_obj: Aligner object containing alignment data.
+    """
     subjects = aligned_obj.df[aligned_obj.subject_col].unique()
     fig, axes = plt.subplots(nrows=1, ncols=len(subjects), figsize=(15, 3), sharey=True)
+
     for i, subject in enumerate(subjects):
         ax = axes[i]
         subject_data = aligned_obj.df[aligned_obj.df[aligned_obj.subject_col] == subject]
         x_data = subject_data[aligned_obj.score_col].values
         y_data = subject_data["numeric_label"].values
         cutoff_point = aligned_obj.cutoff_points[subject]
+
         ax.scatter(x_data, y_data, alpha=0.01)
         for cutoff in cutoff_point:
             ax.axvline(x=cutoff, color="green", linestyle="--", label=f"{cutoff:.2f}")
-        ax.set_ylim(None)
+
         ax.set_title(f"Subject: {subject}")
         ax.set_xlabel("Score")
         if i == 0:
             ax.set_ylabel("Label")
         ax.legend()
+
     plt.show()
 
 
 def plot_summary_curve(
-    summary_df, aggregated_curve, scores, genes, fig_size=(2, 0.8), pt_alpha=0.2, line_alpha=0.5, dpi=300
-):
-    """
-    Plots summary curves for a list of genes.
+    summary_df: pd.DataFrame,
+    aggregated_curve: pd.DataFrame,
+    scores: pd.DataFrame,
+    genes: list[str],
+    fig_size: tuple[float, float] = (2, 0.8),
+    pt_alpha: float = 0.2,
+    line_alpha: float = 0.5,
+    dpi: int = 300,
+) -> None:
+    """Plot summary curves for multiple genes.
 
     Parameters
     ----------
-    summary_df (DataFrame): DataFrame containing subject data with columns ['gene', 'subject', 'aligned_score', 'expression', 'smoothed'].
-    aggregated_curve (DataFrame): DataFrame containing aggregated curve data with columns ['aligned_score'] and gene columns.
-    scores (DataFrame): DataFrame containing scores with columns ['gene', 'MI', 'Max'].
-    genes (list of str): List of gene names to plot.
+    summary_df
+        DataFrame with columns ['gene', 'subject', 'aligned_score',
+        'expression', 'smoothed'].
+    aggregated_curve
+        DataFrame with ['aligned_score'] and gene columns.
+    scores
+        DataFrame with columns ['gene', 'MI', 'Max'].
+    genes
+        List of gene names to plot.
+    fig_size
+        Figure size multiplier.
+        Defaults to (2, 0.8).
+    pt_alpha
+        Alpha value for scatter points.
+        Defaults to 0.2.
+    line_alpha
+        Alpha value for lines.
+        Defaults to 0.5.
+    dpi
+        DPI for the figure.
+        Defaults to 300.
     """
     num_genes = len(genes)
     fig, axes = plt.subplots(num_genes, 1, figsize=(fig_size[0], fig_size[1] * num_genes), sharex=True, dpi=dpi)
@@ -197,7 +237,32 @@ def fit_kde(sorted_gene_curve, df, cell_types, bandwidth=50):
     return gene_density
 
 
-def plot_kde_density(density, title="", clusters=None, cluster_colors=None, name_map=None):
+def plot_kde_density(
+    density: pd.DataFrame,
+    title: str = "",
+    clusters: np.ndarray | None = None,
+    cluster_colors: dict[str, str] | None = None,
+    name_map: dict[str, str] | None = None,
+) -> None:
+    """Plot kernel density estimation curves.
+
+    Parameters
+    ----------
+    density
+        DataFrame containing density values for each cell type.
+    title
+        Plot title.
+        Defaults to empty string.
+    clusters
+        Array of cluster assignments.
+        Defaults to None.
+    cluster_colors
+        Dictionary mapping cluster names to colors.
+        Defaults to None.
+    name_map
+        Dictionary for mapping names in the density DataFrame.
+        Defaults to None.
+    """
     fig, ax = plt.subplots(2, 1, figsize=(5, 3), gridspec_kw={"height_ratios": [3, 0.1], "hspace": 0})
     if name_map is not None:
         density.columns = density.columns.map(name_map)
@@ -335,30 +400,50 @@ def plot_kde_density_ridge(
 
 
 def plot_kde_heatmap(
-    cluster_colors,
-    cell_types,
-    cell_type_colors,
-    sorted_gene_curve,
-    df_left,
-    density=None,
-    figsize=(4, 8),
-    left_annotation_columns=None,
-    vmin=-3,
-    vmax=3,
-    save_path=None,
-):
-    """
-    Function to plot a KDE heatmap using PyComplexHeatmap.
+    cluster_colors: dict[str, str],
+    cell_types: list[str],
+    cell_type_colors: dict[str, str],
+    sorted_gene_curve: pd.DataFrame,
+    df_left: pd.DataFrame,
+    density: pd.DataFrame | None = None,
+    figsize: tuple[int, int] = (4, 8),
+    left_annotation_columns: list[tuple[str, str, str]] | None = None,
+    vmin: float = -3,
+    vmax: float = 3,
+    save_path: str | None = None,
+) -> None:
+    """Plot a KDE heatmap using PyComplexHeatmap.
 
     Parameters
     ----------
-    - cluster_colors: Dictionary of cluster names to colors.
-    - cell_types: List or array-like of cell types.
-    - cell_type_colors: Dictionary of cell type names to colors.
-    - density: DataFrame containing density information for different cell types.
-    - sorted_gene_curve: DataFrame or array-like containing the gene expression data to plot.
-    - df_left: DataFrame or array-like for left annotations (e.g., groupings).
-    - output_file: Path to save the output heatmap image (default is "heatmap.png").
+    cluster_colors
+        Dictionary mapping cluster names to colors.
+    cell_types
+        List of cell type names.
+    cell_type_colors
+        Dictionary mapping cell type names to colors.
+    sorted_gene_curve
+        DataFrame containing gene expression data.
+    df_left
+        DataFrame for left annotations.
+    density
+        DataFrame containing density information for different cell types.
+        Defaults to None.
+    figsize
+        Size of the figure (width, height).
+        Defaults to (4, 8).
+    left_annotation_columns
+        List of tuples (name, column, colormap) for left annotations.
+        Defaults to None.
+    vmin
+        Minimum value for color scaling.
+        Defaults to -3.
+    vmax
+        Maximum value for color scaling.
+        Defaults to 3.
+    save_path
+        Path to save the output figure.
+        Defaults to None.
     """
     # Define custom colormaps for Early, Middle, and Late groups
     cmap = {
@@ -437,34 +522,47 @@ def plot_kde_heatmap(
 
 
 def plot_gene_clusters(
-    sorted_gene_curve,
-    row_colors,
-    col_cols,
-    cluster_ordering,
-    display_genes=None,
-    yticklabels=True,
-    labelsize=8,
-    tick_width=0.01,
-    figsize=(4, 8),
-    save_path=None,
-):
-    """
-    Plots a heatmap with optional gene labeling on the y-axis.
-
-    Dynamically adjusts y positions of labels to prevent overlap by lowering them if they are too close.
-    Shifts x position to the right every two consecutive overlaps.
+    sorted_gene_curve: pd.DataFrame,
+    row_colors: list[str],
+    col_cols: list[str],
+    cluster_ordering: str,
+    display_genes: list[str] | None = None,
+    yticklabels: bool | list[str] = True,
+    labelsize: int = 8,
+    tick_width: float = 0.01,
+    figsize: tuple[int, int] = (4, 8),
+    save_path: str | None = None,
+) -> None:
+    """Plot a heatmap with optional gene labeling on the y-axis.
 
     Parameters
     ----------
-    sorted_gene_curve (DataFrame): DataFrame with gene expression data.
-    row_colors (list): List of colors for rows.
-    col_cols (list): List of colors for columns.
-    cluster_ordering (str): String to label x-axis.
-    display_genes (list of str): List of genes to display on the y-axis. If None, all genes are labeled.
-    yticklabels (bool or list): Whether to display y-tick labels or a list of labels.
-    labelsize (int): Font size for y-tick labels.
-    figsize (tuple): Size of the figure.
-    save_path (str): Path to save the figure. If None, the figure is not saved.
+    sorted_gene_curve
+        DataFrame with gene expression data.
+    row_colors
+        List of colors for rows.
+    col_cols
+        List of colors for columns.
+    cluster_ordering
+        String to label x-axis.
+    display_genes
+        List of genes to display on the y-axis.
+        Defaults to None.
+    yticklabels
+        Whether to display y-tick labels or a list of labels.
+        Defaults to True.
+    labelsize
+        Font size for y-tick labels.
+        Defaults to 8.
+    tick_width
+        Width of tick marks.
+        Defaults to 0.01.
+    figsize
+        Size of the figure (width, height).
+        Defaults to (4, 8).
+    save_path
+        Path to save the figure.
+        Defaults to None.
     """
     # Create clustermap
     g = sns.clustermap(

@@ -18,7 +18,8 @@
 
 .. autosummary::
     :toctree: generated
-    align_pseudotime
+
+    tl.align_pseudotime
 ```
 
 ## Plotting
@@ -29,5 +30,6 @@
 
 .. autosummary::
     :toctree: generated
-    align_pseudotime
+
+    pl.align_pseudotime
 ```

@@ -1,4 +1,4 @@
-import anndata as ad
+import anndata
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -6,24 +6,22 @@ from tslearn.barycenters import softdtw_barycenter
 from tslearn.metrics import soft_dtw_alignment
 
 
-def interpolate_expression(exp_data, traj_cond, traj_val_new_pts, win_sz):
-    """
-    Interpolates expression data along pseudotime.
+def interpolate_expression(
+    exp_data: pd.DataFrame,
+    traj_cond: np.ndarray,
+    traj_val_new_pts: np.ndarray,
+    win_sz: float,
+) -> np.ndarray:
+    """Interpolates expression data along pseudotime.
 
-    Parameters
-    ----------
-    exp_data : pd.DataFrame
-        Expression data for a single sample.
-    traj_cond : np.array
-        Pseudotime values corresponding to `exp_data`.
-    traj_val_new_pts : np.array
-        New pseudotime grid points.
-    win_sz : float
-        Window size for Gaussian-weighted interpolation.
+    Args:
+        exp_data: Expression data for a single sample.
+        traj_cond: Pseudotime values corresponding to `exp_data`.
+        traj_val_new_pts: New pseudotime grid points.
+        win_sz: Window size for Gaussian-weighted interpolation.
 
     Returns
     -------
-    np.array
         Interpolated expression values at `traj_val_new_pts`.
     """
     return np.array(
@@ -35,29 +33,32 @@ def interpolate_expression(exp_data, traj_cond, traj_val_new_pts, win_sz):
     )
 
 
-def compute_barycenter(interpolated_arrays, method="soft_dtw", gamma=10, max_iter=100, tol=1e-3, verbose=True):
-    """
-    Computes the barycenter trajectory using DTW.
+def compute_barycenter(
+    interpolated_arrays: np.ndarray,
+    method: str = "soft_dtw",
+    gamma: float = 10,
+    max_iter: int = 100,
+    tol: float = 1e-3,
+    verbose: bool = True,
+) -> np.ndarray:
+    """Computes the barycenter trajectory using DTW.
 
-    Parameters
-    ----------
-    interpolated_arrays : np.array
-        Interpolated gene expression arrays for each sample.
-    method : str, optional
-        'soft_dtw' or 'dba' (default: 'soft_dtw').
-    gamma : float, optional
-        Gamma parameter for soft-DTW (default: 10).
-    max_iter : int, optional
-        Maximum iterations for DTW barycenter computation (default: 100).
-    tol : float, optional
-        Convergence tolerance (default: 1e-3).
-    verbose : bool, optional
-        Whether to display progress.
+    Args:
+        interpolated_arrays: Interpolated gene expression arrays for each sample.
+        method: Method for computing barycenter, currently only 'soft_dtw' supported.
+            Defaults to "soft_dtw".
+        gamma: Gamma parameter for soft-DTW. Defaults to 10.
+        max_iter: Maximum iterations for DTW barycenter computation. Defaults to 100.
+        tol: Convergence tolerance. Defaults to 1e-3.
+        verbose: Whether to display progress. Defaults to True.
 
     Returns
     -------
-    np.array
         Computed barycenter expression values.
+
+    Raises
+    ------
+        ValueError: If method is not 'soft_dtw'.
     """
     if method == "soft_dtw":
         if verbose:
@@ -67,27 +68,27 @@ def compute_barycenter(interpolated_arrays, method="soft_dtw", gamma=10, max_ite
         raise ValueError("Currently only 'soft_dtw' is supported")
 
 
-def map_cells_to_aligned_pseudotime(adata, pseudotime_key, batch_key, gamma=10, verbose=True):
-    """
-    Maps individual cells to the aligned pseudotime using soft-DTW to find correspondences.
+def map_cells_to_aligned_pseudotime(
+    adata: anndata.AnnData,
+    pseudotime_key: str,
+    batch_key: str,
+    gamma: float = 10,
+    verbose: bool = True,
+) -> anndata.AnnData:
+    """Maps individual cells to the aligned pseudotime using soft-DTW.
 
-    Parameters
-    ----------
-    adata : AnnData
-        AnnData object with pseudotime in `adata.obs[pseudotime_key]` and batch labels in `adata.obs[batch_key]`.
-    pseudotime_key : str
-        Column in `adata.obs` containing original pseudotime values.
-    batch_key : str
-        Column in `adata.obs` indicating sample/batch labels.
-    gamma : float, optional
-        Gamma parameter for soft-DTW (default: 10).
-    verbose : bool, optional
-        Whether to display a progress bar (default: True).
+    Args:
+        adata: AnnData object with pseudotime in `adata.obs[pseudotime_key]`
+            and batch labels in `adata.obs[batch_key]`.
+        pseudotime_key: Column in `adata.obs` containing original pseudotime values.
+        batch_key: Column in `adata.obs` indicating sample/batch labels.
+        gamma: Gamma parameter for soft-DTW. Defaults to 10.
+        verbose: Whether to display a progress bar. Defaults to True.
 
     Returns
     -------
-    AnnData
-        Updated AnnData object with "aligned_pseudotime" stored in `adata.obs["aligned_pseudotime"]`.
+        Updated AnnData object with "aligned_pseudotime" stored in
+        `adata.obs["aligned_pseudotime"]`.
     """
     aligned_pseudotime = np.zeros(len(adata), dtype=float)  # Placeholder for mapped values
     barycenter_pseudotime = adata.uns["barycenter"]["aligned_pseudotime"]  # Interpolated aligned pseudotime
@@ -133,48 +134,64 @@ def map_cells_to_aligned_pseudotime(adata, pseudotime_key, batch_key, gamma=10, 
 
 
 def align_pseudotime(
-    adata: ad.AnnData,
+    adata: anndata.AnnData,
     pseudotime_key: str,
     batch_key: str,
-    win_sz=0.3,
-    num_pts=30,
-    gamma=10,
-    method="soft_dtw",
-    max_iter=100,
-    tol=1e-3,
-    verbose=True,
-):
-    """
-    Aligns pseudotime across multiple samples and computes a barycenter trajectory.
+    win_sz: float = 0.3,
+    num_pts: int = 30,
+    gamma: float = 10,
+    method: str = "soft_dtw",
+    max_iter: int = 100,
+    tol: float = 1e-3,
+    verbose: bool = True,
+) -> anndata.AnnData:
+    """Aligns pseudotime across multiple samples and computes a barycenter trajectory.
 
     Parameters
     ----------
-    adata : AnnData
+    adata
         The input AnnData object with pseudotime stored in `adata.obs[pseudotime_key]`.
-    pseudotime_key : str
+
+    pseudotime_key
         Column in `adata.obs` containing pseudotime values.
-    batch_key : str
+
+    batch_key
         Column in `adata.obs` indicating sample/batch labels.
-    win_sz : float, optional
-        Window size for interpolation (default: 0.3).
-    num_pts : int, optional
-        Number of points for interpolation (default: 30).
-    gamma : float, optional
-        Gamma parameter for soft-DTW (default: 10).
-    method : str, optional
-        'soft_dtw' or 'dba' (default: 'soft_dtw').
-    max_iter : int, optional
-        Maximum iterations for DTW barycenter computation (default: 100).
-    tol : float, optional
-        Convergence tolerance (default: 1e-3).
-    verbose : bool, optional
-        Whether to display progress bars (default: True).
+
+    win_sz
+        Window size for interpolation.
+        Defaults to 0.3.
+
+    num_pts
+        Number of points for interpolation.
+        Defaults to 30.
+
+    gamma
+        Gamma parameter for soft-DTW.
+        Defaults to 10.
+
+    method
+        Method for computing barycenter, either 'soft_dtw' or 'dba'.
+        Defaults to "soft_dtw".
+
+    max_iter
+        Maximum iterations for DTW barycenter computation.
+        Defaults to 100.
+
+    tol
+        Convergence tolerance.
+        Defaults to 1e-3.
+
+    verbose
+        Whether to display progress bars.
+        Defaults to True.
 
     Returns
     -------
-    AnnData
-        The modified AnnData object with aligned pseudotime in `adata.obs["aligned_pseudotime"]`
-        and barycenter expression stored in `adata.uns["barycenter_expr"]`.
+    anndata.AnnData
+        The modified AnnData object with aligned pseudotime in
+        `adata.obs["aligned_pseudotime"]` and barycenter expression stored in
+        `adata.uns["barycenter_expr"]`.
     """
     # Prepare data for interpolation
     batches = adata.obs[batch_key].unique()
