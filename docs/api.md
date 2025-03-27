@@ -4,7 +4,7 @@
 
 ```{eval-rst}
 .. module:: scdebussy.pp
-.. currentmodule:: scdebussy
+.. currentmodule:: scdebussy.pp
 
 .. autosummary::
     :toctree: generated
@@ -14,7 +14,7 @@
 
 ```{eval-rst}
 .. module:: scdebussy.tl
-.. currentmodule:: scdebussy
+.. currentmodule:: scdebussy.tl
 
 .. autosummary::
     :toctree: generated
@@ -26,7 +26,7 @@
 
 ```{eval-rst}
 .. module:: scdebussy.pl
-.. currentmodule:: scdebussy
+.. currentmodule:: scdebussy.pl
 
 .. autosummary::
     :toctree: generated
