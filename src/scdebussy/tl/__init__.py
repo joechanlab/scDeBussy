@@ -1,5 +1,5 @@
 from ._align import aligner
-from ._barycenter_align import align_pseudotime
+from ._barycenter_align import align_pseudotime, map_cells_to_aligned_pseudotime
 from ._cluster import enrichr, order_genes, process_gene_data
 from ._dba import dtw_barycenter_averaging_with_categories, dtw_barycenter_averaging_with_segments
 from ._gam import gam_smooth_expression
@@ -15,3 +15,7 @@ from ._sliding_window import (
     plot_heatmap,
     sliding_window_enrichment,
 )
+
+__all__ = [
+    "align_pseudotime",
+]
