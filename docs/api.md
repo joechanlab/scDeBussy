@@ -19,7 +19,7 @@
 .. autosummary::
     :toctree: generated
 
-    ._barycenter_align.align_pseudotime
+    align_pseudotime
 ```
 
 ## Plotting
@@ -31,5 +31,5 @@
 .. autosummary::
     :toctree: generated
 
-    .plot.align_pseudotime
+    align_pseudotime
 ```
