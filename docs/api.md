@@ -4,7 +4,7 @@
 
 ```{eval-rst}
 .. module:: scdebussy.pp
-.. currentmodule:: scdebussy.pp
+.. currentmodule:: scdebussy
 
 .. autosummary::
     :toctree: generated
@@ -14,22 +14,22 @@
 
 ```{eval-rst}
 .. module:: scdebussy.tl
-.. currentmodule:: scdebussy.tl
+.. currentmodule:: scdebussy
 
 .. autosummary::
     :toctree: generated
 
-    align_pseudotime
+    tl.align_pseudotime
 ```
 
 ## Plotting
 
 ```{eval-rst}
 .. module:: scdebussy.pl
-.. currentmodule:: scdebussy.pl
+.. currentmodule:: scdebussy
 
 .. autosummary::
     :toctree: generated
 
-    align_pseudotime
+    pl.align_pseudotime
 ```
