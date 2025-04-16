@@ -411,8 +411,11 @@ def plot_kde_heatmap(
     vmin: float = -3,
     vmax: float = 3,
     save_path: str | None = None,
+    genes_to_label: list[str] | None = None,
+    label_fontsize: int = 8,
+    label_color: str = "black",
 ) -> None:
-    """Plot a KDE heatmap using PyComplexHeatmap.
+    """Plot a KDE heatmap using PyComplexHeatmap with optional gene labels.
 
     Parameters
     ----------
@@ -444,6 +447,15 @@ def plot_kde_heatmap(
     save_path
         Path to save the output figure.
         Defaults to None.
+    genes_to_label
+        List of gene names to annotate on the left side of the heatmap.
+        Defaults to None.
+    label_fontsize
+        Font size for gene labels.
+        Defaults to 8.
+    label_color
+        Color for gene label text.
+        Defaults to 'black'.
     """
     # Define custom colormaps for Early, Middle, and Late groups
     cmap = {
@@ -472,7 +484,7 @@ def plot_kde_heatmap(
     )
 
     # Create left annotation
-    if density is not None:
+    if left_annotation_columns is not None and density is not None:
         left_annotations = {}
         for name, col_name, cmap_name in left_annotation_columns:
             if col_name in density.columns:
@@ -496,6 +508,45 @@ def plot_kde_heatmap(
         label_kws={"visible": False},
     )
 
+    # Create gene labels annotation if genes_to_label is provided
+    if genes_to_label is not None:
+        # Ensure genes_to_label is a list (convert from Series if needed)
+        if isinstance(genes_to_label, pd.Series):
+            genes_to_label = genes_to_label.tolist()
+
+        # Convert index to string if it's not already
+        gene_names = sorted_gene_curve.index.astype(str)
+
+        # Find which genes are actually present in the data
+        present_genes = [gene for gene in genes_to_label if gene in gene_names.values]
+        missing_genes = set(genes_to_label) - set(present_genes)
+
+        if missing_genes:
+            print(f"Warning: The following genes were not found in the data: {missing_genes}")
+            print(f"Available genes start with: {list(gene_names[:5])}...")
+
+        # Create labels as a pandas Series
+        gene_labels = pd.Series(np.where(gene_names.isin(present_genes), gene_names, ""), index=gene_names)
+        gene_labels = gene_labels[gene_labels != ""]
+        print(gene_labels)
+
+        # Only proceed if we have at least one gene to label
+        if len(present_genes) > 0:
+            gene_label_ha = pch.HeatmapAnnotation(
+                Genes=pch.anno_label(
+                    gene_labels, merge=False, colors=label_color, fontsize=label_fontsize, rotation=45
+                ),
+                axis=0,
+                verbose=0,
+                label_kws={"visible": False, "color": "none"},
+            )
+
+        # If we have other left annotations, combine them
+        if left_ha is not None:
+            left_ha = pch.HeatmapAnnotation.concat([left_ha, gene_label_ha], axis=0)
+        else:
+            left_ha = gene_label_ha
+
     # Plot the heatmap using PyComplexHeatmap's ClusterMapPlotter
     plt.figure(figsize=figsize)
 
@@ -509,7 +560,7 @@ def plot_kde_heatmap(
         row_cluster=False,
         col_cluster=False,
         row_split_gap=1,
-        cmap="Spectral_r",  # Use a colormap of your choice (e.g., 'viridis', 'parula')
+        cmap="Spectral_r",
         vmin=vmin,
         vmax=vmax,
     )
@@ -517,7 +568,6 @@ def plot_kde_heatmap(
     if save_path is not None:
         plt.savefig(save_path, bbox_inches="tight")
 
-    # Show the plot
     plt.show()
 
 
