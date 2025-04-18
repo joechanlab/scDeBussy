@@ -4,6 +4,7 @@ from collections import defaultdict
 import gseapy as gp
 import numpy as np
 import pandas as pd
+from scipy.sparse import diags
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.preprocessing import StandardScaler
 from tslearn.clustering import KShape
@@ -227,22 +228,27 @@ def process_gene_data(
         zscore_scaler.fit_transform(gene_curve), columns=gene_curve.columns, index=gene_curve.index
     )
 
+    # Reorder data based on weighted pseudotime
+    combined_order = order_genes(normalized_gene_curve.T, weight=weight)
+    sorted_gene_curve = normalized_gene_curve.T.iloc[combined_order, :]
+
     # Perform clustering
     if hierarchical:
-        clusters = AgglomerativeClustering(n_clusters=n_clusters, linkage="ward").fit_predict(
-            normalized_gene_curve.values.T
-        )
+        n_genes = normalized_gene_curve.shape[1]
+        band_width = 3
+        connectivity = diags(
+            [1] * (2 * band_width + 1), offsets=range(-band_width, band_width + 1), shape=(n_genes, n_genes)
+        ).toarray()
+        clusters = AgglomerativeClustering(
+            n_clusters=n_clusters, linkage="ward", connectivity=connectivity
+        ).fit_predict(normalized_gene_curve.values.T)
     else:
         clusters = (
             KShape(n_clusters=n_clusters, random_state=0, verbose=True, n_init=n_init)
             .fit(normalized_gene_curve.values.T)
             .labels_
         )
-
-    # Reorder data based on weighted pseudotime
-    combined_order = order_genes(normalized_gene_curve.T, weight=weight)
-    sorted_gene_curve = normalized_gene_curve.T.iloc[combined_order, :]
-    labels = clusters[combined_order]
+    labels = clusters
 
     # Reorder labels based on their average position
     label_orders = order_categories_by_average_position(labels)

@@ -534,7 +534,13 @@ def plot_kde_heatmap(
         if len(present_genes) > 0:
             gene_label_ha = pch.HeatmapAnnotation(
                 Genes=pch.anno_label(
-                    gene_labels, merge=False, colors=label_color, fontsize=label_fontsize, rotation=45
+                    gene_labels,
+                    merge=True,
+                    colors=label_color,
+                    fontsize=label_fontsize,
+                    rotation=0,
+                    extend=True,
+                    relpos=(1, 0.5),
                 ),
                 axis=0,
                 verbose=0,
