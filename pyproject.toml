@@ -3,7 +3,7 @@ build-backend = "hatchling.build"
 requires = [ "hatchling" ]
 
 [project]
-name = "scDeBussy"
+name = "scdebussy"
 version = "0.0.1"
 description = "Dynamic time warping-based pseudotime alignment of scRNA-seq data"
 readme = "README.md"
