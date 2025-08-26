@@ -22,10 +22,16 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
 ]
+dynamic = [ "version" ]
 dependencies = [
   "anndata",
+  "gseapy",
+  "pycomplexheatmap",
+  "pygam",
+  "scanpy",
   # for debug logging (referenced from the issue template)
   "session-info2",
+  "tslearn",
 ]
 optional-dependencies.dev = [
   "pre-commit",

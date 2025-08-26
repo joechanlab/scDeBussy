@@ -20,7 +20,6 @@ defaults:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
-
     strategy:
       fail-fast: false
       matrix:
@@ -54,6 +53,7 @@ jobs:
           MPLBACKEND: agg
           PLATFORM: ${{ matrix.os }}
           DISPLAY: :42
+          SCIPY_ARRAY_API: "1"
         run: uvx hatch test --cover --python ${{ matrix.python }}
       - name: Upload coverage
         uses: codecov/codecov-action@v4
