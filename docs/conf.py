@@ -5,6 +5,7 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
 # -- Path setup --------------------------------------------------------------
+import os
 import sys
 from datetime import datetime
 from importlib.metadata import metadata
