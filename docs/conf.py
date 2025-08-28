@@ -15,7 +15,6 @@ HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE / "extensions"))
 sys.path.insert(0, os.path.abspath("../src/"))
 
-
 # -- Project information -----------------------------------------------------
 
 # NOTE: If you installed your project in editable mode, this might be stale.
