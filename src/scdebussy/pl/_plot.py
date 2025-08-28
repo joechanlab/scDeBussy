@@ -18,7 +18,7 @@ def align_pseudotime(
     color: str,
     pseudotime_key: str = "aligned_pseudotime",
     barycenter_key: str = "barycenter",
-    dot_size: int = 100,
+    dot_size: int = 10,
 ) -> None:
     """Plot gene expression along aligned pseudotime with barycenter curve.
 
@@ -61,7 +61,7 @@ def align_pseudotime(
     fig, ax = plt.subplots(figsize=(6, 4))
 
     # Scatter plot of individual cell expression values
-    sc.pl.scatter(adata, x=pseudotime_key, y=gene, color=color, ax=ax, size=dot_size, show=False)
+    sc.pl.scatter(adata, x=pseudotime_key, y=gene, color=color, ax=ax, size=dot_size, show=False, use_raw=False)
 
     # Overlay barycenter expression line
     ax.plot(
@@ -112,7 +112,7 @@ def plot_summary_curve(
     aggregated_curve: pd.DataFrame,
     scores: pd.DataFrame,
     genes: list[str],
-    fig_size: tuple[float, float] = (2, 0.8),
+    figsize: tuple[float, float] = (2, 0.8),
     pt_alpha: float = 0.2,
     line_alpha: float = 0.5,
     dpi: int = 300,
@@ -144,7 +144,7 @@ def plot_summary_curve(
         Defaults to 300.
     """
     num_genes = len(genes)
-    fig, axes = plt.subplots(num_genes, 1, figsize=(fig_size[0], fig_size[1] * num_genes), sharex=True, dpi=dpi)
+    fig, axes = plt.subplots(num_genes, 1, figsize=figsize, sharex=True, dpi=dpi)
 
     if num_genes == 1:
         axes = [axes]  # Ensure axes is iterable if there's only one subplot
@@ -175,11 +175,11 @@ def plot_summary_curve(
 
         # Calculate ylim based on smoothed values
         y_min = min(gene_summary["smoothed"])
-        y_max = max(gene_summary["smoothed"])
+        y_max = 1
 
         # Add some padding (e.g., 5% of the range)
         y_range = y_max - y_min
-        padding = 0.05 * y_range
+        padding = 0.1 * y_range
         ylim = (y_min - padding, y_max + padding)
 
         ax.set_ylim(ylim)
@@ -199,24 +199,69 @@ def plot_summary_curve(
     plt.show()
 
 
-def plot_kshape_clustering(sorted_gene_curve, categories, label_orders=None, alpha=0.05):
+def plot_kshape_clustering(
+    sorted_gene_curve,
+    categories,
+    label_orders=None,
+    alpha=0.05,
+    save_path=None,
+    dpi=300,
+    figsize=None,
+    label_colors=None,  # New parameter for custom colors per label
+    label_xpos=0.95,  # X position (right-aligned)
+    label_ypos=0.05,  # Y position (bottom-aligned)
+    centroid_linewidth=2,  # Line width for centroid
+):
     if label_orders is None:
         label_orders = sorted(set(categories))
-    plt.figure(figsize=(2, 5 / 3 * len(label_orders)))
+    if figsize is None:
+        figsize = (2, 5 / 3 * len(label_orders))
+    if label_colors is None:
+        # Default to red if no colors provided
+        label_colors = dict.fromkeys(label_orders, "red")
+
+    plt.figure(figsize=figsize)
+
     for i, category in enumerate(label_orders):
-        plt.subplot(len(label_orders), 1, i + 1)
+        ax = plt.subplot(len(label_orders), 1, i + 1)
         cluster_curves = sorted_gene_curve.values[[x == category for x in categories], :]
+
+        # Plot individual curves (thin black lines)
         for xx in cluster_curves:
             plt.plot(xx.ravel(), "k-", alpha=alpha)
+
+        # Plot centroid (using label-matched color)
         centroid = np.mean(cluster_curves, axis=0)
-        plt.plot(centroid.ravel(), "r-", linewidth=1.5, label="Centroid")
-        # plt.text(0.36, 0.1, category, transform=plt.gca().transAxes)
+        plt.plot(
+            centroid.ravel(),
+            "-",  # Solid line
+            color=label_colors[category],  # Match label color
+            linewidth=centroid_linewidth,
+            label="Centroid",
+        )
+
+        # Add text annotation (bottom-right)
+        ax.text(
+            label_xpos,
+            label_ypos,
+            category,
+            transform=ax.transAxes,
+            color=label_colors[category],  # Same color as centroid
+            fontsize=12,
+            horizontalalignment="right",
+            verticalalignment="bottom",
+            weight="bold",  # Make text stand out
+        )
+
         plt.xticks([])
         plt.yticks([])
+
         if i == 0:
-            plt.title("KShape Clustering")
+            plt.title("Clusters", fontsize=14)
 
     plt.tight_layout()
+    if save_path is not None:
+        plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
     plt.show()
 
 
@@ -414,6 +459,7 @@ def plot_kde_heatmap(
     genes_to_label: list[str] | None = None,
     label_fontsize: int = 8,
     label_color: str = "black",
+    dpi: int = 300,
 ) -> None:
     """Plot a KDE heatmap using PyComplexHeatmap with optional gene labels.
 
@@ -469,18 +515,25 @@ def plot_kde_heatmap(
         label=pch.anno_label(
             cell_types,
             merge=True,
-            extend=True,
+            extend=False,
             rotation=0,
             colors=cell_type_colors,
-            adjust_color=True,
+            adjust_color=False,
             luminance=0.75,
             relpos=(0, 0),
+            fontsize=12,
+            fontweight="bold",
+            arrowprops={"visible": False},
+            ha="center",
+            va="center",
         ),
         Group=pch.anno_simple(cell_types, colors=cell_type_colors),
         verbose=1,
         axis=1,
         plot_legend=False,
-        label_kws={"visible": False},
+        label_kws={
+            "visible": False,
+        },
     )
 
     # Create left annotation
@@ -500,14 +553,7 @@ def plot_kde_heatmap(
         left_ha = None
 
     # Create right annotation
-    right_ha = pch.HeatmapAnnotation(
-        Group=pch.anno_simple(df_left, colors=cluster_colors),
-        verbose=1,
-        axis=0,
-        plot_legend=True,
-        label_kws={"visible": False},
-    )
-
+    right_ha = None
     # Create gene labels annotation if genes_to_label is provided
     if genes_to_label is not None:
         # Ensure genes_to_label is a list (convert from Series if needed)
@@ -531,8 +577,17 @@ def plot_kde_heatmap(
         print(gene_labels)
 
         # Only proceed if we have at least one gene to label
-        if len(present_genes) > 0:
-            gene_label_ha = pch.HeatmapAnnotation(
+        if len(present_genes) == 0:
+            right_ha = pch.HeatmapAnnotation(
+                Group=pch.anno_simple(df_left, colors=cluster_colors),
+                verbose=1,
+                axis=0,
+                plot_legend=False,
+                label_kws={"visible": False},
+            )
+        else:
+            right_ha = pch.HeatmapAnnotation(
+                Group=pch.anno_simple(df_left, colors=cluster_colors),
                 Genes=pch.anno_label(
                     gene_labels,
                     merge=True,
@@ -540,40 +595,45 @@ def plot_kde_heatmap(
                     fontsize=label_fontsize,
                     rotation=0,
                     extend=True,
-                    relpos=(1, 0.5),
+                    relpos=(0, 0.5),
                 ),
                 axis=0,
-                verbose=0,
-                label_kws={"visible": False, "color": "none"},
+                verbose=1,
+                plot_legend=False,
+                label_kws={"visible": False},
             )
-
-        # If we have other left annotations, combine them
-        if left_ha is not None:
-            left_ha = pch.HeatmapAnnotation.concat([left_ha, gene_label_ha], axis=0)
-        else:
-            left_ha = gene_label_ha
 
     # Plot the heatmap using PyComplexHeatmap's ClusterMapPlotter
     plt.figure(figsize=figsize)
-
-    pch.ClusterMapPlotter(
+    heatmap = pch.ClusterMapPlotter(
         data=sorted_gene_curve,
         top_annotation=col_ha,
         left_annotation=left_ha,
         right_annotation=right_ha,
-        legend_gap=7,
-        legend_hpad=-10,
         row_cluster=False,
         col_cluster=False,
         row_split_gap=1,
         cmap="Spectral_r",
         vmin=vmin,
         vmax=vmax,
+        xlabel="scDeBussy pseudotime",
+        ylabel="Genes",
+        xlabel_kws={"fontsize": 14},  # Adjust size as needed
+        ylabel_kws={"fontsize": 14},  # Adjust size as needed
+        plot_legend=False,
+        legend_kws={"label": None},
     )
-
     if save_path is not None:
-        plt.savefig(save_path, bbox_inches="tight")
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0, dpi=dpi)
+    plt.tight_layout()
+    plt.show()
 
+    plt.figure(figsize=(1, 0.5))
+    heatmap.plot_legends()
+    if save_path is not None:
+        legend_save_path = save_path.rsplit(".", 1)[0] + "_legend." + save_path.rsplit(".", 1)[1]
+        plt.savefig(legend_save_path, bbox_inches="tight", pad_inches=0, dpi=dpi)
+    plt.tight_layout()
     plt.show()
 
 
