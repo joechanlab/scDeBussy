@@ -76,6 +76,65 @@ def align_pseudotime(
     plt.show()
 
 
+def plot_alignment(adata, group_key, key_aligned, key_ground_truth):
+    groups = adata.obs[group_key].unique()
+    n_groups = len(groups)
+
+    # grid layout
+    n_cols = 3
+    n_rows = int(np.ceil(n_groups / n_cols))
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 4 * n_rows))
+    axes = axes.flatten()
+
+    for i, group in enumerate(groups):
+        ax = axes[i]
+
+        # select group
+        sub = adata.obs[adata.obs[group_key] == group]
+
+        # remove NaN rows
+        mask = ~(np.isnan(sub[key_aligned]) | np.isnan(sub[key_ground_truth]))
+        sub = sub[mask]
+
+        if len(sub) == 0:
+            ax.set_title(f"{group} (no valid data)")
+            ax.axis("off")
+            continue
+
+        # sort by local pseudotime so connecting lines don't cross randomly
+        order = np.argsort(sub[key_aligned].values)
+        local_sorted = sub[key_aligned].values[order]
+        global_sorted = sub[key_ground_truth].values[order]
+
+        # scatter points
+        ax.scatter(global_sorted, np.ones(len(sub)), s=18, alpha=0.7, color="blue", label="Ground truth pseudotime")
+        ax.scatter(local_sorted, np.zeros(len(sub)), s=18, alpha=0.7, color="red", label="Aligned pseudotime")
+
+        # connecting lines
+        for j in range(len(sub)):
+            ax.plot([local_sorted[j], global_sorted[j]], [0, 1], color="black", alpha=0.25, linewidth=0.5)
+
+        # aesthetics
+        ax.set_xlim(0, 1)
+        ax.set_ylim(-0.1, 1.1)
+        ax.set_yticks([0, 1])
+        ax.set_yticklabels(["Aligned pseudotime", "Ground truth pseudotime"])
+        ax.set_xlabel("Pseudotime")
+        ax.set_title(f"{group} (n={len(sub)})")
+        ax.grid(True, alpha=0.3)
+
+        if i == 0:
+            ax.legend(loc="upper right")
+
+    # hide unused axes
+    for j in range(n_groups, len(axes)):
+        axes[j].axis("off")
+
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_sigmoid_fits(
     aligned_obj,
 ):

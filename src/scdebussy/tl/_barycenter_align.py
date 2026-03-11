@@ -1,6 +1,8 @@
 import anndata
 import numpy as np
 import pandas as pd
+from sklearn.decomposition import PCA
+from sklearn.isotonic import IsotonicRegression
 from tqdm import tqdm
 from tslearn.barycenters import softdtw_barycenter
 from tslearn.metrics import soft_dtw_alignment
@@ -73,6 +75,7 @@ def map_cells_to_aligned_pseudotime(
     pseudotime_key: str,
     batch_key: str,
     gamma: float = 10,
+    pca_components: int | None = 10,
     verbose: bool = True,
 ) -> anndata.AnnData:
     """Maps individual cells to the aligned pseudotime using soft-DTW.
@@ -90,8 +93,12 @@ def map_cells_to_aligned_pseudotime(
         Updated AnnData object with "aligned_pseudotime" stored in
         `adata.obs["aligned_pseudotime"]`.
     """
-    aligned_pseudotime = np.zeros(len(adata), dtype=float)  # Placeholder for mapped values
+    if "barycenter" not in adata.uns:
+        raise KeyError("adata.uns['barycenter'] not found. Run barycenter computation first.")
     barycenter_pseudotime = adata.uns["barycenter"]["aligned_pseudotime"]  # Interpolated aligned pseudotime
+    barycenter_expr = np.asarray(adata.uns["barycenter"]["expression"])
+
+    aligned = np.full(len(adata), np.nan, dtype=float)
 
     batches = adata.obs[batch_key].unique()
     batch_iterator = tqdm(batches, desc="Mapping pseudotime", disable=not verbose)
@@ -99,37 +106,84 @@ def map_cells_to_aligned_pseudotime(
     for batch in batch_iterator:
         # Extract batch-specific data
         mask = adata.obs[batch_key] == batch
-        original_pseudotime = adata.obs.loc[mask, pseudotime_key].values
-        expression_data = adata.to_df().loc[mask].values
-        barycenter_expr = adata.uns["barycenter"]["expression"].values
-        barycenter_pseudotime = adata.uns["barycenter"]["aligned_pseudotime"]
+        if mask.sum() == 0:
+            continue
 
-        # Compute the soft alignment matrix
-        alignment_matrix, sim = soft_dtw_alignment(expression_data, barycenter_expr, gamma=gamma)
+        orig_pt = adata.obs.loc[mask, pseudotime_key].values
+        expr_df = adata.to_df().loc[mask]
+        if expr_df.shape[0] == 0:
+            continue
+        X = expr_df.values
 
-        # Get the highest-weighted match for each original pseudotime
-        mapped_pseudotime = np.zeros(len(original_pseudotime))
+        # PCA reduction (concatenate to ensure shared subspace with barycenter)
+        if (
+            pca_components is not None
+            and isinstance(pca_components, int)
+            and pca_components > 0
+            and X.shape[1] > pca_components
+        ):
+            concat = np.vstack([X, barycenter_expr])
+            n_comp = min(pca_components, concat.shape[1])
+            pca = PCA(n_components=n_comp)
+            concat_p = pca.fit_transform(concat)
+            X_p = concat_p[: X.shape[0]]
+            Y_p = concat_p[X.shape[0] :]
+        else:
+            X_p = X
+            Y_p = barycenter_expr
 
-        for orig_idx in range(alignment_matrix.shape[0]):
-            # Find the barycenter index with the highest alignment score for this original index
-            bary_idx = np.argmax(alignment_matrix[orig_idx])  # Get best match based on alignment strength
-            mapped_pseudotime[orig_idx] = barycenter_pseudotime[bary_idx]
+        # Sort cells by original pseudotime
+        sort_idx = np.argsort(orig_pt)
+        X_sorted = X_p[sort_idx]
 
-        # Handle missing values with nearest-neighbor interpolation
-        mapped_series = pd.Series(mapped_pseudotime)
-        mapped_series.replace(0, np.nan, inplace=True)  # Replace unset values with NaN
-        mapped_series.interpolate(method="nearest", inplace=True)  # Nearest-neighbor interpolation
-        mapped_pseudotime = mapped_series.to_numpy()
+        # soft-DTW alignment (rows: X_sorted, cols: Y_p)
+        alignment_matrix, sim = soft_dtw_alignment(X_sorted, Y_p, gamma=gamma)
 
-        # Use the mask to assign the correct values
-        aligned_pseudotime[mask] = mapped_pseudotime
+        # continuous index (expected barycenter index) per cell
+        row_sums = alignment_matrix.sum(axis=1)
+        idx_range = np.arange(alignment_matrix.shape[1])
+        with np.errstate(invalid="ignore", divide="ignore"):
+            cont_idx = (alignment_matrix * idx_range[None, :]).sum(axis=1) / row_sums
+        cont_idx[row_sums == 0] = np.nan
 
-    # Store mapped pseudotime in `obs`
-    adata.obs["aligned_pseudotime"] = aligned_pseudotime
+        # Map continuous index to barycenter pseudotime
+        mapped_sorted = np.full_like(cont_idx, np.nan, dtype=float)
+        valid = ~np.isnan(cont_idx)
+        if np.any(valid):
+            mapped_sorted[valid] = np.interp(
+                cont_idx[valid], np.arange(len(barycenter_pseudotime)), barycenter_pseudotime
+            )
 
+        # Enforce monotonic non-decreasing mapping to avoid crisscross using isotonic regression
+        nan_mask = np.isnan(mapped_sorted)
+        if not np.all(nan_mask):
+            valid = ~nan_mask
+            x_sorted = orig_pt[sort_idx][valid]
+            y_sorted = mapped_sorted[valid]
+            w = row_sums[valid]
+
+            ir = IsotonicRegression(
+                increasing=True,
+                out_of_bounds="clip",
+                y_min=np.nanmin(barycenter_pseudotime),
+                y_max=np.nanmax(barycenter_pseudotime),
+            )
+            y_fit = ir.fit_transform(x_sorted, y_sorted, sample_weight=w)
+
+            mapped_monotone = mapped_sorted.copy()
+            mapped_monotone[valid] = y_fit
+        else:
+            mapped_monotone = mapped_sorted
+
+        # put back in original order
+        mapped_original = np.empty_like(mapped_monotone)
+        mapped_original[sort_idx] = mapped_monotone
+
+        aligned[mask] = mapped_original
+
+    adata.obs["aligned_pseudotime"] = aligned
     if verbose:
-        print("Pseudotime mapping completed.")
-
+        print("Mapping complete; added obs['aligned_pseudotime']")
     return adata
 
 
