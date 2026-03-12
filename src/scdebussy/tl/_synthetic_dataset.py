@@ -1,5 +1,5 @@
-import numpy as np
 import anndata as ad
+import numpy as np
 
 
 def rbf_kernel(t, lengthscale, variance):
@@ -45,7 +45,9 @@ def sample_gp(t, lengthscale, variance, rng, jitter=1e-6):
     sample : np.ndarray
         GP sample of shape (N,).
     """
-    K = rbf_kernel(t, lengthscale, variance) + jitter * np.eye(len(t))  # Covariance matrix with jitter for numerical stability
+    K = rbf_kernel(t, lengthscale, variance) + jitter * np.eye(
+        len(t)
+    )  # Covariance matrix with jitter for numerical stability
     return rng.multivariate_normal(np.zeros(len(t)), K)  # Parameters are mean=0 and covariance matrix K from RBF Kernel
 
 
@@ -177,7 +179,9 @@ def construct_patient_trajectories(f_global, time_grid, K, P, deviation_kernel, 
     """
     f_p = []  # Initialize patient-specific trajectories
     for p in range(P):
-        delta_p = sample_patient_deviations(time_grid, K, deviation_kernel, rng)  # Per patient and per gene independent deviation (K,T)
+        delta_p = sample_patient_deviations(
+            time_grid, K, deviation_kernel, rng
+        )  # Per patient and per gene independent deviation (K,T)
         f_p.append(f_global + delta_p)
     return f_p  # list of P arrays, each (K,T)
 
@@ -307,7 +311,9 @@ def sample_global_pseudotimes(patient_groups, N_cells, rng, eps=0.05):
     """
     tau_global = []
     for p, group in enumerate(patient_groups):
-        tau_global.append(sample_tau_group(N_cells[p], group, rng, eps=eps))  # Sampled pseudotimes for patient p in specified group
+        tau_global.append(
+            sample_tau_group(N_cells[p], group, rng, eps=eps)
+        )  # Sampled pseudotimes for patient p in specified group
     return tau_global
 
 
@@ -366,8 +372,12 @@ def generate_observed_expression(time_grid, patient_trajectories, tau_global, si
         X_p = np.zeros((len(tau_p), f_p.shape[0]))  # Initialize observed expression matrix per patient (N_p, K)
 
         for g in range(f_p.shape[0]):  # For each gene
-            mean_vals = np.interp(tau_p, time_grid, f_p[g])  # (Linear) Interpolation makes GP a continuous function over pseudotime given different time grids
-            X_p[:, g] = rng.normal(mean_vals, sigma_noise)  # Even if cells at same pseudotime, gene expression values will differ - add Gaussian noise to simulate measurement noise
+            mean_vals = np.interp(
+                tau_p, time_grid, f_p[g]
+            )  # (Linear) Interpolation makes GP a continuous function over pseudotime given different time grids
+            X_p[:, g] = rng.normal(
+                mean_vals, sigma_noise
+            )  # Even if cells at same pseudotime, gene expression values will differ - add Gaussian noise to simulate measurement noise
 
         X.append(X_p)
 
@@ -561,9 +571,9 @@ def simulate_LF_MOGP(
     # Additional model components saved in .uns
     uns = {
         "time_grid": np.array(time_grid),
-        "latent_factors": U,            # (M,T)
+        "latent_factors": U,  # (M,T)
         "global_trajectory": f_global,  # (K,T)
-        "patient_trajectories": f_p,    # list length P
+        "patient_trajectories": f_p,  # list length P
         "loading_matrix": W,
         "patient_groups": np.array(patient_groups, dtype=str),
         "N_cells_per_patient": N_cells,
