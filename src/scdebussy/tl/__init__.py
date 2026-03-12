@@ -15,6 +15,7 @@ from ._sliding_window import (
     plot_heatmap,
     sliding_window_enrichment,
 )
+from ._synthetic_dataset import initialize_structured_loadings, simulate_LF_MOGP
 
 __all__ = [
     "align_pseudotime",
