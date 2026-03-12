@@ -1,4 +1,5 @@
 from ._align import aligner
+from ._synthetic_dataset import initialize_structured_loadings, simulate_LF_MOGP
 from ._barycenter_align import align_pseudotime
 from ._cluster import enrichr, order_genes, process_gene_data
 from ._dba import dtw_barycenter_averaging_with_categories, dtw_barycenter_averaging_with_segments
