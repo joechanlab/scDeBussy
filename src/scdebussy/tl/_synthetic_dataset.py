@@ -178,7 +178,7 @@ def construct_patient_trajectories(f_global, time_grid, K, P, deviation_kernel, 
         List of P arrays, each of shape (K, T).
     """
     f_p = []  # Initialize patient-specific trajectories
-    for p in range(P):
+    for _ in range(P):
         delta_p = sample_patient_deviations(
             time_grid, K, deviation_kernel, rng
         )  # Per patient and per gene independent deviation (K,T)
@@ -268,11 +268,10 @@ def sample_tau_group(N, group, rng, eps=0.05):
     elif group == "transition":
         main = truncated_normal(rng, N, 0.5, 0.05)
     elif group == "bimodal":
-        w1 = rng.beta(2, 2)  # Random weight for first mode between 0 and 1
-        w2 = 1 - w1
+        w = rng.beta(2, 2)  # Random weight for first mode between 0 and 1
 
-        N1 = int(N * w1)
-        N2 = N - N1
+        N1 = int(N * w)
+        N2 = N - N1  # Complement weight for second mode
 
         peak1 = truncated_normal(rng, N1, 0.1, 0.05)
         peak2 = truncated_normal(rng, N2, 0.9, 0.05)
@@ -385,10 +384,10 @@ def generate_observed_expression(time_grid, patient_trajectories, tau_global, si
 
 
 def initialize_structured_loadings(K, M=4, rng=None, strength=1.0):
-    """Create a structured loading matrix W (K x M) such that genes are
-    evenly divided into monotonic up, monotonic down, bump, and flat groups.
+    """Create a structured loading matrix W (K x M).
 
-    M should be 4 for the four factors: [up, down, bump, flat].
+    Genes are evenly divided into monotonic up, monotonic down, bump, and
+    flat groups. M should be 4 for the four factors: [up, down, bump, flat].
 
     Parameters
     ----------
