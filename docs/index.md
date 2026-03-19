@@ -8,6 +8,7 @@
 
 api.md
 notebooks/example.ipynb
+notebooks/benchmark_demo.ipynb
 changelog.md
 contributing.md
 references.md

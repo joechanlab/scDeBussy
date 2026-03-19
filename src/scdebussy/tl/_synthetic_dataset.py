@@ -316,27 +316,134 @@ def sample_global_pseudotimes(patient_groups, N_cells, rng, eps=0.05):
     return tau_global
 
 
-def compute_local_pseudotime(tau_global):
-    """Compute per-patient local pseudotimes via min-max normalization.
+def _safe_minmax_scale(values):
+    """Scale values to [0, 1] with safe handling for constant arrays."""
+    v_min = np.min(values)
+    v_max = np.max(values)
+    if v_max == v_min:
+        return np.zeros_like(values)
+    return (values - v_min) / (v_max - v_min)
+
+
+def _random_monotone_warp(tau, rng, warp_strength=0.2, n_knots=7):
+    """Apply a smooth random monotone warping to pseudotime values."""
+    if warp_strength <= 0:
+        return tau
+
+    x_knots = np.linspace(0.0, 1.0, n_knots)
+    noise = rng.normal(loc=0.0, scale=0.2 * warp_strength, size=n_knots)
+    y_knots = np.clip(x_knots + noise, 0.0, 1.0)
+    y_knots[0] = 0.0
+    y_knots[-1] = 1.0
+
+    # Enforce monotonicity and normalize to preserve [0, 1] endpoints.
+    y_knots = np.maximum.accumulate(y_knots)
+    y_knots = _safe_minmax_scale(y_knots)
+    y_knots[0] = 0.0
+    y_knots[-1] = 1.0
+
+    return np.interp(tau, x_knots, y_knots)
+
+
+def _group_warp(tau, group, rng, warp_strength=0.2):
+    """Apply a group-specific monotone warping profile."""
+    if warp_strength <= 0:
+        return tau
+
+    s = float(warp_strength)
+    if group == "early":
+        alpha = 1.0 + 2.0 * s
+        warped = np.power(tau, alpha)
+    elif group == "late":
+        alpha = 1.0 + 2.0 * s
+        warped = 1.0 - np.power(1.0 - tau, alpha)
+    elif group == "transition":
+        steepness = max(0.15, 0.25 - 0.12 * s)
+        warped = 0.5 * (np.tanh((tau - 0.5) / steepness) + 1.0)
+    elif group in {"bimodal", "full"}:
+        warped = _random_monotone_warp(tau, rng=rng, warp_strength=s)
+    else:
+        warped = tau
+
+    return np.clip(warped, 0.0, 1.0)
+
+
+def compute_local_pseudotime(
+    tau_global,
+    patient_groups=None,
+    warp_mode="none",
+    warp_strength=0.2,
+    rng=None,
+):
+    """Compute per-patient local pseudotimes with optional monotone warping.
 
     Parameters
     ----------
     tau_global : list of np.ndarray
         List of P arrays of global pseudotimes, each of shape (N_p,).
+    patient_groups : list of str, optional
+        Per-patient group labels used when ``warp_mode='patient_group'``.
+    warp_mode : str, optional
+        Warping mode. One of ``'none'``, ``'random_monotone'``,
+        or ``'patient_group'``. Default is ``'none'``.
+    warp_strength : float, optional
+        Non-negative strength of warping. Ignored when ``warp_mode='none'``.
+    rng : np.random.Generator, optional
+        NumPy random generator used by stochastic warping modes.
 
     Returns
     -------
     s_local : list of np.ndarray
         List of P arrays of local pseudotimes normalized to [0, 1].
     """
+    allowed_modes = {"none", "random_monotone", "patient_group"}
+    if warp_mode not in allowed_modes:
+        raise ValueError(f"Unknown warp_mode: {warp_mode!r}. Allowed: {sorted(allowed_modes)}")
+    if warp_strength < 0:
+        raise ValueError("warp_strength must be non-negative.")
+
+    if rng is None:
+        rng = np.random.default_rng()
+
+    if warp_mode == "patient_group":
+        if patient_groups is None:
+            raise ValueError("patient_groups must be provided when warp_mode='patient_group'.")
+        if len(patient_groups) != len(tau_global):
+            raise ValueError("Length of patient_groups must match tau_global.")
+
     s_local = []
-    for tau in tau_global:
-        tau_min, tau_max = np.min(tau), np.max(tau)
-        if tau_max == tau_min:  # Avoid division by zero if all tau are the same
-            s_local.append(np.zeros_like(tau))
+    for p, tau in enumerate(tau_global):
+        tau_scaled = _safe_minmax_scale(tau)
+
+        if warp_mode == "none" or warp_strength == 0:
+            tau_warped = tau_scaled
+        elif warp_mode == "random_monotone":
+            tau_warped = _random_monotone_warp(tau_scaled, rng=rng, warp_strength=warp_strength)
         else:
-            s_local.append((tau - tau_min) / (tau_max - tau_min))
+            tau_warped = _group_warp(
+                tau_scaled,
+                group=patient_groups[p],
+                rng=rng,
+                warp_strength=warp_strength,
+            )
+
+        # Final normalization keeps output in [0, 1] regardless of transform details.
+        s_local.append(_safe_minmax_scale(tau_warped))
+
     return s_local
+
+
+def _validate_simulation_options(eps, warp_mode, warp_strength):
+    """Validate simulator options for pseudotime noise and warping."""
+    if not (0.0 <= eps <= 1.0):
+        raise ValueError("eps must be in [0, 1].")
+
+    allowed_modes = {"none", "random_monotone", "patient_group"}
+    if warp_mode not in allowed_modes:
+        raise ValueError(f"Unknown warp_mode: {warp_mode!r}. Allowed: {sorted(allowed_modes)}")
+
+    if warp_strength < 0:
+        raise ValueError("warp_strength must be non-negative.")
 
 
 def generate_observed_expression(time_grid, patient_trajectories, tau_global, sigma_noise, rng):
@@ -462,6 +569,9 @@ def simulate_LF_MOGP(
     lambda_cells,
     sigma_noise,
     rng=None,
+    eps=0.0,
+    warp_mode="none",
+    warp_strength=0.2,
 ):
     """Full generative model for synthetic single-cell data via LF-MOGP.
 
@@ -498,6 +608,14 @@ def simulate_LF_MOGP(
         Standard deviation of the Gaussian observation noise.
     rng : np.random.Generator, optional
         NumPy random generator. A new one is created if not provided.
+    eps : float, optional
+        Fraction of cells mixed with uniform pseudotime noise during global
+        pseudotime sampling. Default is 0.0 to preserve prior behavior.
+    warp_mode : str, optional
+        Optional local pseudotime warping mode. One of ``'none'``,
+        ``'random_monotone'``, or ``'patient_group'``. Default is ``'none'``.
+    warp_strength : float, optional
+        Non-negative warping strength used when ``warp_mode != 'none'``.
 
     Returns
     -------
@@ -512,6 +630,8 @@ def simulate_LF_MOGP(
     if rng is None:
         rng = np.random.default_rng()
 
+    _validate_simulation_options(eps=eps, warp_mode=warp_mode, warp_strength=warp_strength)
+
     # 1. Latent factors
     U = sample_structured_latent_factors(time_grid, rng)
 
@@ -525,10 +645,16 @@ def simulate_LF_MOGP(
     N_cells = sample_cell_counts(P, lambda_cells, rng)
 
     # 5. Global pseudotimes τ
-    tau_global = sample_global_pseudotimes(patient_groups, N_cells, rng)
+    tau_global = sample_global_pseudotimes(patient_groups, N_cells, rng, eps=eps)
 
     # 6. Local pseudotimes s
-    s_local = compute_local_pseudotime(tau_global)
+    s_local = compute_local_pseudotime(
+        tau_global,
+        patient_groups=patient_groups,
+        warp_mode=warp_mode,
+        warp_strength=warp_strength,
+        rng=rng,
+    )
 
     # 7. Observed expression
     X = generate_observed_expression(time_grid, f_p, tau_global, sigma_noise, rng)
@@ -576,6 +702,11 @@ def simulate_LF_MOGP(
         "loading_matrix": W,
         "patient_groups": np.array(patient_groups, dtype=str),
         "N_cells_per_patient": N_cells,
+        "simulation_options": {
+            "eps": float(eps),
+            "warp_mode": warp_mode,
+            "warp_strength": float(warp_strength),
+        },
     }
 
     # Construct AnnData

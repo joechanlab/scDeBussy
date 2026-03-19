@@ -11,7 +11,25 @@ scDeBussy is a Python package for dynamic time warping (DTW)-based pseudotime al
 ## Features
 
 * Implements DTW with barycenter averaging for trajectory alignment
+* Provides a scverse-style API: `scdebussy.tl.scDeBussy(adata, ...)`
 * Downstream analysis with visualization capabilities
+
+## Quick example
+
+```python
+import scdebussy as sd
+
+sd.tl.scDeBussy(
+	adata,
+	patient_key="patient",
+	pseudotime_key="s_local",
+	n_bins=100,
+	bandwidth=0.1,
+)
+
+print(adata.obs["aligned_pseudotime"].head())
+print(adata.uns["barycenter"].keys())
+```
 
 ## Getting started
 
