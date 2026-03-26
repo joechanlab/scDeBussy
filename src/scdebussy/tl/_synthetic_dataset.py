@@ -368,11 +368,98 @@ def _group_warp(tau, group, rng, warp_strength=0.2):
     return np.clip(warped, 0.0, 1.0)
 
 
+def _sigmoid_warp(tau, warp_strength):
+    """Apply sigmoid warping to pseudotime values.
+
+    Squeezes the center of the trajectory, making transitions appear faster
+    mid-pseudotime and slower at the boundaries.
+
+    Parameters
+    ----------
+    tau : np.ndarray
+        Pseudotime values in [0, 1].
+    warp_strength : float
+        Non-negative strength of warping. Larger values produce sharper sigmoid.
+
+    Returns
+    -------
+    warped : np.ndarray
+        Warped pseudotime values in [0, 1].
+    """
+    if warp_strength <= 0:
+        return tau
+    steepness = 3.0 + float(warp_strength) * 10.0
+    sig = 1.0 / (1.0 + np.exp(-steepness * (2.0 * tau - 1.0)))
+    sig_min = 1.0 / (1.0 + np.exp(steepness))
+    sig_max = 1.0 / (1.0 + np.exp(-steepness))
+    warped = (sig - sig_min) / (sig_max - sig_min + 1e-12)
+    return np.clip(warped, 0.0, 1.0)
+
+
+def _nonlinear_warp(tau, warp_strength):
+    """Apply power-law (convex) warping to pseudotime values.
+
+    Stretches the early part of the trajectory and compresses the late part.
+
+    Parameters
+    ----------
+    tau : np.ndarray
+        Pseudotime values in [0, 1].
+    warp_strength : float
+        Non-negative strength of warping.
+
+    Returns
+    -------
+    warped : np.ndarray
+        Warped pseudotime values in [0, 1].
+    """
+    if warp_strength <= 0:
+        return tau
+    power = 1.0 + float(warp_strength) * 2.0
+    return np.clip(np.power(tau, power), 0.0, 1.0)
+
+
+def _nonlinear_inverse_warp(tau, warp_strength):
+    """Apply inverse power-law (concave) warping to pseudotime values.
+
+    Compresses the early part of the trajectory and stretches the late part.
+
+    Parameters
+    ----------
+    tau : np.ndarray
+        Pseudotime values in [0, 1].
+    warp_strength : float
+        Non-negative strength of warping.
+
+    Returns
+    -------
+    warped : np.ndarray
+        Warped pseudotime values in [0, 1].
+    """
+    if warp_strength <= 0:
+        return tau
+    power = 1.0 / (1.0 + float(warp_strength))
+    return np.clip(np.power(tau, power), 0.0, 1.0)
+
+
+_WARP_DISPATCH = {
+    "none": lambda tau, s, rng, group: tau,
+    "random_monotone": lambda tau, s, rng, group: _random_monotone_warp(tau, rng=rng, warp_strength=s),
+    "patient_group": lambda tau, s, rng, group: _group_warp(tau, group=group, rng=rng, warp_strength=s),
+    "sigmoid": lambda tau, s, rng, group: _sigmoid_warp(tau, s),
+    "nonlinear": lambda tau, s, rng, group: _nonlinear_warp(tau, s),
+    "nonlinear_inverse": lambda tau, s, rng, group: _nonlinear_inverse_warp(tau, s),
+}
+
+_ALLOWED_WARP_MODES = frozenset(_WARP_DISPATCH) | {"mixed"}
+
+
 def compute_local_pseudotime(
     tau_global,
     patient_groups=None,
     warp_mode="none",
     warp_strength=0.2,
+    warp_types=None,
     rng=None,
 ):
     """Compute per-patient local pseudotimes with optional monotone warping.
@@ -385,9 +472,16 @@ def compute_local_pseudotime(
         Per-patient group labels used when ``warp_mode='patient_group'``.
     warp_mode : str, optional
         Warping mode. One of ``'none'``, ``'random_monotone'``,
-        or ``'patient_group'``. Default is ``'none'``.
+        ``'patient_group'``, ``'sigmoid'``, ``'nonlinear'``,
+        ``'nonlinear_inverse'``, or ``'mixed'``. Default is ``'none'``.
+        When ``'mixed'``, ``warp_types`` must be provided and each patient
+        is warped with its own mode from that list.
     warp_strength : float, optional
         Non-negative strength of warping. Ignored when ``warp_mode='none'``.
+    warp_types : list of str, optional
+        Per-patient warp mode names used when ``warp_mode='mixed'``.
+        Length must equal ``len(tau_global)``. Each entry must be one of the
+        non-``'mixed'`` warp modes.
     rng : np.random.Generator, optional
         NumPy random generator used by stochastic warping modes.
 
@@ -396,9 +490,8 @@ def compute_local_pseudotime(
     s_local : list of np.ndarray
         List of P arrays of local pseudotimes normalized to [0, 1].
     """
-    allowed_modes = {"none", "random_monotone", "patient_group"}
-    if warp_mode not in allowed_modes:
-        raise ValueError(f"Unknown warp_mode: {warp_mode!r}. Allowed: {sorted(allowed_modes)}")
+    if warp_mode not in _ALLOWED_WARP_MODES:
+        raise ValueError(f"Unknown warp_mode: {warp_mode!r}. Allowed: {sorted(_ALLOWED_WARP_MODES)}")
     if warp_strength < 0:
         raise ValueError("warp_strength must be non-negative.")
 
@@ -411,21 +504,28 @@ def compute_local_pseudotime(
         if len(patient_groups) != len(tau_global):
             raise ValueError("Length of patient_groups must match tau_global.")
 
+    if warp_mode == "mixed":
+        if warp_types is None:
+            raise ValueError("warp_types must be provided when warp_mode='mixed'.")
+        if len(warp_types) != len(tau_global):
+            raise ValueError("Length of warp_types must match tau_global.")
+        invalid = [m for m in warp_types if m not in _WARP_DISPATCH]
+        if invalid:
+            raise ValueError(f"Invalid entries in warp_types: {invalid}. Allowed: {sorted(_WARP_DISPATCH)}")
+
     s_local = []
     for p, tau in enumerate(tau_global):
         tau_scaled = _safe_minmax_scale(tau)
 
         if warp_mode == "none" or warp_strength == 0:
             tau_warped = tau_scaled
-        elif warp_mode == "random_monotone":
-            tau_warped = _random_monotone_warp(tau_scaled, rng=rng, warp_strength=warp_strength)
+        elif warp_mode == "mixed":
+            mode_p = warp_types[p]
+            group_p = patient_groups[p] if patient_groups is not None else None
+            tau_warped = _WARP_DISPATCH[mode_p](tau_scaled, warp_strength, rng, group_p)
         else:
-            tau_warped = _group_warp(
-                tau_scaled,
-                group=patient_groups[p],
-                rng=rng,
-                warp_strength=warp_strength,
-            )
+            group_p = patient_groups[p] if patient_groups is not None else None
+            tau_warped = _WARP_DISPATCH[warp_mode](tau_scaled, warp_strength, rng, group_p)
 
         # Final normalization keeps output in [0, 1] regardless of transform details.
         s_local.append(_safe_minmax_scale(tau_warped))
@@ -433,20 +533,28 @@ def compute_local_pseudotime(
     return s_local
 
 
-def _validate_simulation_options(eps, warp_mode, warp_strength):
+def _validate_simulation_options(eps, warp_mode, warp_strength, warp_types=None, tau_global_len=None):
     """Validate simulator options for pseudotime noise and warping."""
     if not (0.0 <= eps <= 1.0):
         raise ValueError("eps must be in [0, 1].")
 
-    allowed_modes = {"none", "random_monotone", "patient_group"}
-    if warp_mode not in allowed_modes:
-        raise ValueError(f"Unknown warp_mode: {warp_mode!r}. Allowed: {sorted(allowed_modes)}")
+    if warp_mode not in _ALLOWED_WARP_MODES:
+        raise ValueError(f"Unknown warp_mode: {warp_mode!r}. Allowed: {sorted(_ALLOWED_WARP_MODES)}")
 
     if warp_strength < 0:
         raise ValueError("warp_strength must be non-negative.")
 
+    if warp_mode == "mixed":
+        if warp_types is None:
+            raise ValueError("warp_types must be provided when warp_mode='mixed'.")
+        if tau_global_len is not None and len(warp_types) != tau_global_len:
+            raise ValueError("Length of warp_types must equal number of patients P.")
+        invalid = [m for m in warp_types if m not in _WARP_DISPATCH]
+        if invalid:
+            raise ValueError(f"Invalid entries in warp_types: {invalid}. Allowed: {sorted(_WARP_DISPATCH)}")
 
-def generate_observed_expression(time_grid, patient_trajectories, tau_global, sigma_noise, rng):
+
+def generate_observed_expression(time_grid, patient_trajectories, tau_global, sigma_noise, rng, noise_settings=None):
     """Generate noisy observed gene expression by interpolating patient trajectories.
 
     Parameters
@@ -461,29 +569,82 @@ def generate_observed_expression(time_grid, patient_trajectories, tau_global, si
         Standard deviation of the Gaussian observation noise.
     rng : np.random.Generator
         NumPy random generator.
+    noise_settings : dict or None, optional
+        Optional dictionary controlling the noise model. Supported keys:
+
+        - ``'model'`` : ``'gaussian'`` | ``'student_t'`` | ``'laplace'``
+          (default ``'gaussian'``).
+        - ``'df'`` : int, degrees of freedom for ``'student_t'`` (default 3).
+        - ``'heteroscedastic'`` : bool, scale noise by distance from centre
+          (default ``False``).
+        - ``'hetero_base'`` : float, base scale multiplier (default 0.8).
+        - ``'hetero_amp'`` : float, amplitude of scale variation (default 1.6).
+        - ``'outlier_frac'`` : float in [0, 1), fraction of cells receiving
+          additional Laplace spike noise (default 0.0).
+        - ``'dropout_frac'`` : float in [0, 1), fraction of cells zeroed out
+          per gene (default 0.0).
+        - ``'patient_offset_scale'`` : float, std. dev. of additive per-patient
+          per-gene offset (default 0.0).
+
+        ``None`` uses simple isotropic Gaussian noise (prior behaviour).
 
     Returns
     -------
     X : list of np.ndarray
         List of P arrays, each of shape (N_p, K), with observed expression values.
     """
-    P = len(patient_trajectories)  # Number of patients
-    X = []  # Initialize general observed expression data
+    if noise_settings is None:
+        noise_settings = {}
+
+    noise_model = noise_settings.get("model", "gaussian")
+    df = int(noise_settings.get("df", 3))
+    heteroscedastic = bool(noise_settings.get("heteroscedastic", False))
+    hetero_base = float(noise_settings.get("hetero_base", 0.8))
+    hetero_amp = float(noise_settings.get("hetero_amp", 1.6))
+    outlier_frac = float(noise_settings.get("outlier_frac", 0.0))
+    dropout_frac = float(noise_settings.get("dropout_frac", 0.0))
+    offset_scale = float(noise_settings.get("patient_offset_scale", 0.0))
+
+    if noise_model not in {"gaussian", "student_t", "laplace"}:
+        raise ValueError(f"Unknown noise model: {noise_model!r}. Allowed: 'gaussian', 'student_t', 'laplace'.")
+
+    P = len(patient_trajectories)
+    X = []
 
     for p in range(P):
-        f_p = patient_trajectories[p]  # (K,T)
+        f_p = patient_trajectories[p]  # (K, T)
         tau_p = tau_global[p]  # (N_p,)
+        n_cells = len(tau_p)
+        X_p = np.zeros((n_cells, f_p.shape[0]))
 
-        # Interpolate each gene across τ
-        X_p = np.zeros((len(tau_p), f_p.shape[0]))  # Initialize observed expression matrix per patient (N_p, K)
+        per_gene_offset = rng.normal(0, offset_scale, size=f_p.shape[0]) if offset_scale > 0 else np.zeros(f_p.shape[0])
 
-        for g in range(f_p.shape[0]):  # For each gene
-            mean_vals = np.interp(
-                tau_p, time_grid, f_p[g]
-            )  # (Linear) Interpolation makes GP a continuous function over pseudotime given different time grids
-            X_p[:, g] = rng.normal(
-                mean_vals, sigma_noise
-            )  # Even if cells at same pseudotime, gene expression values will differ - add Gaussian noise to simulate measurement noise
+        for g in range(f_p.shape[0]):
+            mean_vals = np.interp(tau_p, time_grid, f_p[g]) + per_gene_offset[g]
+
+            if heteroscedastic:
+                scale_vec = sigma_noise * (hetero_base + hetero_amp * np.abs(tau_p - 0.5))
+            else:
+                scale_vec = np.full(n_cells, sigma_noise)
+
+            if noise_model == "gaussian":
+                noise = rng.normal(0, 1, size=n_cells) * scale_vec
+            elif noise_model == "student_t":
+                noise = rng.standard_t(df, size=n_cells) * scale_vec
+            else:  # laplace
+                noise = rng.laplace(0, 1, size=n_cells) * scale_vec
+
+            if outlier_frac > 0:
+                spike_mask = rng.random(n_cells) < outlier_frac
+                noise[spike_mask] += rng.laplace(0, sigma_noise * 3.0, size=int(spike_mask.sum()))
+
+            vals = mean_vals + noise
+
+            if dropout_frac > 0:
+                drop_mask = rng.random(n_cells) < dropout_frac
+                vals[drop_mask] = 0.0
+
+            X_p[:, g] = vals
 
         X.append(X_p)
 
@@ -572,6 +733,8 @@ def simulate_LF_MOGP(
     eps=0.0,
     warp_mode="none",
     warp_strength=0.2,
+    warp_types=None,
+    noise_settings=None,
 ):
     """Full generative model for synthetic single-cell data via LF-MOGP.
 
@@ -602,8 +765,9 @@ def simulate_LF_MOGP(
     patient_groups : list of str
         Pseudotime distribution type per patient
         (``'early'``, ``'late'``, ``'transition'``, ``'bimodal'``, ``'full'``).
-    lambda_cells : float
-        Expected number of cells per patient (Poisson rate).
+    lambda_cells : float or list of float
+        Expected number of cells per patient (Poisson rate). When a list is
+        supplied, each entry is used as the rate for the corresponding patient.
     sigma_noise : float
         Standard deviation of the Gaussian observation noise.
     rng : np.random.Generator, optional
@@ -613,9 +777,19 @@ def simulate_LF_MOGP(
         pseudotime sampling. Default is 0.0 to preserve prior behavior.
     warp_mode : str, optional
         Optional local pseudotime warping mode. One of ``'none'``,
-        ``'random_monotone'``, or ``'patient_group'``. Default is ``'none'``.
+        ``'random_monotone'``, ``'patient_group'``, ``'sigmoid'``,
+        ``'nonlinear'``, ``'nonlinear_inverse'``, or ``'mixed'``.
+        Default is ``'none'``. When ``'mixed'``, ``warp_types`` must be
+        provided.
     warp_strength : float, optional
         Non-negative warping strength used when ``warp_mode != 'none'``.
+    warp_types : list of str or None, optional
+        Per-patient warp mode names used when ``warp_mode='mixed'``.
+        Length must equal ``P``.
+    noise_settings : dict or None, optional
+        Optional noise configuration passed to
+        :func:`generate_observed_expression`. ``None`` uses simple isotropic
+        Gaussian noise.
 
     Returns
     -------
@@ -630,7 +804,13 @@ def simulate_LF_MOGP(
     if rng is None:
         rng = np.random.default_rng()
 
-    _validate_simulation_options(eps=eps, warp_mode=warp_mode, warp_strength=warp_strength)
+    _validate_simulation_options(
+        eps=eps,
+        warp_mode=warp_mode,
+        warp_strength=warp_strength,
+        warp_types=warp_types,
+        tau_global_len=P,
+    )
 
     # 1. Latent factors
     U = sample_structured_latent_factors(time_grid, rng)
@@ -641,8 +821,14 @@ def simulate_LF_MOGP(
     # 3. Patient trajectories f_p(t)
     f_p = construct_patient_trajectories(f_global, time_grid, K, P, deviation_kernel, rng)
 
-    # 4. Cell counts
-    N_cells = sample_cell_counts(P, lambda_cells, rng)
+    # 4. Cell counts — lambda_cells may be scalar or per-patient list
+    if np.isscalar(lambda_cells):
+        N_cells = sample_cell_counts(P, lambda_cells, rng)
+    else:
+        lambda_cells = list(lambda_cells)
+        if len(lambda_cells) != P:
+            raise ValueError(f"lambda_cells list length ({len(lambda_cells)}) must equal P ({P}).")
+        N_cells = np.array([rng.poisson(lam) for lam in lambda_cells], dtype=int)
 
     # 5. Global pseudotimes τ
     tau_global = sample_global_pseudotimes(patient_groups, N_cells, rng, eps=eps)
@@ -653,11 +839,12 @@ def simulate_LF_MOGP(
         patient_groups=patient_groups,
         warp_mode=warp_mode,
         warp_strength=warp_strength,
+        warp_types=warp_types,
         rng=rng,
     )
 
     # 7. Observed expression
-    X = generate_observed_expression(time_grid, f_p, tau_global, sigma_noise, rng)
+    X = generate_observed_expression(time_grid, f_p, tau_global, sigma_noise, rng, noise_settings=noise_settings)
 
     # 8. Build an AnnData object
 
@@ -698,6 +885,7 @@ def simulate_LF_MOGP(
         "time_grid": np.array(time_grid),
         "latent_factors": U,  # (M,T)
         "global_trajectory": f_global,  # (K,T)
+        "warp_types": list(warp_types) if warp_types is not None else None,
         "patient_trajectories": f_p,  # list length P
         "loading_matrix": W,
         "patient_groups": np.array(patient_groups, dtype=str),

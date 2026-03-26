@@ -1,5 +1,12 @@
 import numpy as np
 import pytest
+from scripts.benchmark.compare_methods import (
+    _pairwise_only_subset,
+    _single_axis_subset,
+    build_global_ranking,
+    build_head_to_head_table,
+)
+from scripts.benchmark.methods import available_methods
 
 from scdebussy.tl import scDeBussy, smooth_patient_trajectory
 
@@ -50,6 +57,52 @@ def test_scDeBussy_validates_required_columns(sample_adata):
         scDeBussy(broken, patient_key="patient", pseudotime_key="s_local")
 
 
+def test_scDeBussy_accepts_advanced_dtw_and_barycenter_args(sample_adata):
+    result = scDeBussy(
+        sample_adata,
+        patient_key="patient",
+        pseudotime_key="s_local",
+        n_bins=12,
+        bandwidth=0.15,
+        gamma=0.1,
+        max_iter=3,
+        dtw_dist_method="euclidean",
+        dtw_step_pattern="asymmetric",
+        dtw_open_begin=False,
+        dtw_open_end=True,
+        dtw_window_fraction=0.3,
+        barycenter_init_iter=3,
+        barycenter_update_iter=2,
+    )
+
+    params = result.uns["barycenter"]["params"]
+    assert params["dtw_dist_method"] == "euclidean"
+    assert params["dtw_step_pattern"] == "asymmetric"
+    assert params["dtw_open_begin"] is False
+    assert params["dtw_open_end"] is True
+    assert params["dtw_window_fraction"] == 0.3
+    assert params["barycenter_init_iter"] == 3
+    assert params["barycenter_update_iter"] == 2
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"dtw_dist_method": "invalid"}, "dtw_dist_method"),
+        ({"dtw_step_pattern": "invalid"}, "dtw_step_pattern"),
+        ({"dtw_open_begin": "yes"}, "dtw_open_begin"),
+        ({"dtw_open_end": "no"}, "dtw_open_end"),
+        ({"dtw_window_fraction": 0.0}, "dtw_window_fraction"),
+        ({"dtw_window_fraction": 1.2}, "dtw_window_fraction"),
+        ({"barycenter_init_iter": 0}, "barycenter_init_iter"),
+        ({"barycenter_update_iter": 0}, "barycenter_update_iter"),
+    ],
+)
+def test_scDeBussy_validates_advanced_parameters(sample_adata, kwargs, match):
+    with pytest.raises(ValueError, match=match):
+        scDeBussy(sample_adata, **kwargs)
+
+
 def test_smooth_patient_trajectory_returns_expected_shapes(sample_adata):
     smoothed, density = smooth_patient_trajectory(
         sample_adata,
@@ -63,3 +116,72 @@ def test_smooth_patient_trajectory_returns_expected_shapes(sample_adata):
     assert tuple(smoothed.shape) == (9, sample_adata.n_vars)
     assert tuple(density.shape) == (9,)
     assert np.all(density.numpy() > 0)
+
+
+def test_compare_methods_excludes_pairwise_only_from_single_axis_ranking():
+    import pandas as pd
+
+    df = pd.DataFrame(
+        [
+            {
+                "method": "scdebussy",
+                "evaluation_mode": "single_axis",
+                "scenario": "clean_baseline",
+                "seed": 0,
+                "aligned_global_pearson_r": 0.95,
+                "runtime_s": 1.0,
+            },
+            {
+                "method": "genes2genes_pairwise",
+                "evaluation_mode": "pairwise_only",
+                "scenario": "clean_baseline",
+                "seed": 0,
+                "aligned_global_pearson_r": np.nan,
+                "runtime_s": 10.0,
+                "unsupervised_method_fraction_failed_pairs": 0.0,
+            },
+        ]
+    )
+
+    axis_df = _single_axis_subset(df)
+    pairwise_df = _pairwise_only_subset(df)
+    ranking = build_global_ranking(axis_df)
+
+    assert list(axis_df["method"]) == ["scdebussy"]
+    assert list(pairwise_df["method"]) == ["genes2genes_pairwise"]
+    assert list(ranking["method"]) == ["scdebussy"]
+
+
+def test_compare_methods_handles_pairwise_only_inputs_without_ranking_failure():
+    import pandas as pd
+
+    df = pd.DataFrame(
+        [
+            {
+                "method": "genes2genes_pairwise",
+                "evaluation_mode": "pairwise_only",
+                "scenario": "clean_baseline",
+                "seed": 0,
+                "aligned_global_pearson_r": np.nan,
+                "runtime_s": 10.0,
+                "unsupervised_method_fraction_failed_pairs": 0.0,
+            }
+        ]
+    )
+
+    axis_df = _single_axis_subset(df)
+    ranking = build_global_ranking(axis_df)
+    h2h = build_head_to_head_table(axis_df)
+
+    assert axis_df.empty
+    assert ranking.empty
+    assert h2h.empty
+
+
+def test_genes2genes_ambiguous_alias_is_not_registered():
+    methods = available_methods()
+
+    assert "genes2genes" not in methods
+    assert "genes2genes_fixed_reference" in methods
+    assert "genes2genes_consensus" in methods
+    assert "genes2genes_pairwise" in methods

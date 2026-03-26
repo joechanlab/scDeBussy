@@ -103,8 +103,88 @@ def _validate_alignment_inputs(adata, patient_key, pseudotime_key, n_bins, bandw
     return patient_ids
 
 
-def _fit_barycenter_from_trajectories(patient_trajectories, n_bins, gamma, max_iter, tol, verbose):
-    barycenter = softdtw_barycenter(X=patient_trajectories, gamma=gamma, max_iter=5)
+def _validate_advanced_alignment_inputs(
+    dtw_dist_method,
+    dtw_step_pattern,
+    dtw_open_begin,
+    dtw_open_end,
+    dtw_window_fraction,
+    barycenter_init_iter,
+    barycenter_update_iter,
+):
+    supported_dist_methods = {"cosine", "euclidean", "cityblock", "sqeuclidean"}
+    supported_step_patterns = {
+        "symmetric1",
+        "symmetric2",
+        "asymmetric",
+        "symmetricP0",
+        "asymmetricP0",
+        "symmetricP05",
+        "asymmetricP05",
+        "symmetricP1",
+        "asymmetricP1",
+        "symmetricP2",
+        "asymmetricP2",
+        "typeIa",
+        "typeIb",
+        "typeIc",
+        "typeId",
+        "typeIas",
+        "typeIbs",
+        "typeIcs",
+        "typeIds",
+        "typeIIa",
+        "typeIIb",
+        "typeIIc",
+        "typeIId",
+        "typeIIas",
+        "typeIIbs",
+        "typeIIcs",
+        "typeIIds",
+        "typeIIIc",
+        "typeIVc",
+        "mori2006",
+        "rigid",
+    }
+
+    if dtw_dist_method not in supported_dist_methods:
+        raise ValueError(f"dtw_dist_method must be one of {sorted(supported_dist_methods)}, got {dtw_dist_method!r}.")
+
+    if dtw_step_pattern not in supported_step_patterns:
+        raise ValueError(
+            f"dtw_step_pattern must be one of {sorted(supported_step_patterns)}, got {dtw_step_pattern!r}."
+        )
+
+    if not isinstance(dtw_open_begin, (bool, np.bool_)):
+        raise ValueError("dtw_open_begin must be a boolean.")
+    if not isinstance(dtw_open_end, (bool, np.bool_)):
+        raise ValueError("dtw_open_end must be a boolean.")
+
+    if not np.isfinite(dtw_window_fraction) or dtw_window_fraction <= 0 or dtw_window_fraction > 1:
+        raise ValueError("dtw_window_fraction must be finite and lie in (0, 1].")
+
+    if int(barycenter_init_iter) < 1:
+        raise ValueError("barycenter_init_iter must be at least 1.")
+    if int(barycenter_update_iter) < 1:
+        raise ValueError("barycenter_update_iter must be at least 1.")
+
+
+def _fit_barycenter_from_trajectories(
+    patient_trajectories,
+    n_bins,
+    gamma,
+    max_iter,
+    tol,
+    verbose,
+    dtw_dist_method,
+    dtw_step_pattern,
+    dtw_open_begin,
+    dtw_open_end,
+    dtw_window_fraction,
+    barycenter_init_iter,
+    barycenter_update_iter,
+):
+    barycenter = softdtw_barycenter(X=patient_trajectories, gamma=gamma, max_iter=barycenter_init_iter)
     prev_cost = float("inf")
     warp_paths = []
 
@@ -117,12 +197,12 @@ def _fit_barycenter_from_trajectories(patient_trajectories, n_bins, gamma, max_i
             alignment = dtw(
                 x=barycenter,
                 y=trajectory,
-                dist_method="cosine",
-                step_pattern="asymmetric",
-                open_begin=True,
-                open_end=True,
+                dist_method=dtw_dist_method,
+                step_pattern=dtw_step_pattern,
+                open_begin=dtw_open_begin,
+                open_end=dtw_open_end,
                 window_type="sakoechiba",
-                window_args={"window_size": max(1, int(0.2 * n_bins))},
+                window_args={"window_size": max(1, int(dtw_window_fraction * n_bins))},
             )
 
             total_cost += alignment.distance
@@ -145,7 +225,7 @@ def _fit_barycenter_from_trajectories(patient_trajectories, n_bins, gamma, max_i
         barycenter = softdtw_barycenter(
             X=cropped_trajectories,
             gamma=gamma,
-            max_iter=1,
+            max_iter=barycenter_update_iter,
             init=barycenter,
         )
 
@@ -221,6 +301,13 @@ def scDeBussy(
     key_added="aligned_pseudotime",
     barycenter_key="barycenter",
     verbose=False,
+    dtw_dist_method="cosine",
+    dtw_step_pattern="asymmetric",
+    dtw_open_begin=True,
+    dtw_open_end=True,
+    dtw_window_fraction=0.2,
+    barycenter_init_iter=5,
+    barycenter_update_iter=1,
 ):
     """
     Align per-patient pseudotime trajectories onto a shared barycenter.
@@ -249,6 +336,20 @@ def scDeBussy(
         Key in ``adata.uns`` where barycenter metadata is stored.
     verbose : bool
         Whether to print EM progress.
+    dtw_dist_method : str
+        Distance metric used inside DTW (e.g. ``"cosine"`` or ``"euclidean"``).
+    dtw_step_pattern : str
+        Step pattern used by DTW (e.g. ``"asymmetric"``, ``"symmetric1"``, ``"symmetric2"``).
+    dtw_open_begin : bool
+        Whether DTW alignment is allowed to start from an open boundary.
+    dtw_open_end : bool
+        Whether DTW alignment is allowed to end at an open boundary.
+    dtw_window_fraction : float
+        Fraction of ``n_bins`` used as Sakoe-Chiba window size; must lie in ``(0, 1]``.
+    barycenter_init_iter : int
+        Number of Soft-DTW barycenter iterations used for initialization.
+    barycenter_update_iter : int
+        Number of Soft-DTW barycenter iterations used in each EM M-step.
 
     Returns
     -------
@@ -256,6 +357,15 @@ def scDeBussy(
         The same ``adata`` object with aligned results written in place.
     """
     patient_ids = _validate_alignment_inputs(adata, patient_key, pseudotime_key, n_bins, bandwidth)
+    _validate_advanced_alignment_inputs(
+        dtw_dist_method=dtw_dist_method,
+        dtw_step_pattern=dtw_step_pattern,
+        dtw_open_begin=dtw_open_begin,
+        dtw_open_end=dtw_open_end,
+        dtw_window_fraction=dtw_window_fraction,
+        barycenter_init_iter=barycenter_init_iter,
+        barycenter_update_iter=barycenter_update_iter,
+    )
 
     patient_trajectories = []
     patient_densities = {}
@@ -278,6 +388,13 @@ def scDeBussy(
         max_iter=max_iter,
         tol=tol,
         verbose=verbose,
+        dtw_dist_method=dtw_dist_method,
+        dtw_step_pattern=dtw_step_pattern,
+        dtw_open_begin=dtw_open_begin,
+        dtw_open_end=dtw_open_end,
+        dtw_window_fraction=dtw_window_fraction,
+        barycenter_init_iter=barycenter_init_iter,
+        barycenter_update_iter=barycenter_update_iter,
     )
 
     adata.obs[key_added] = _map_cells_to_aligned_pseudotime(
@@ -304,6 +421,13 @@ def scDeBussy(
             "max_iter": max_iter,
             "tol": tol,
             "key_added": key_added,
+            "dtw_dist_method": dtw_dist_method,
+            "dtw_step_pattern": dtw_step_pattern,
+            "dtw_open_begin": dtw_open_begin,
+            "dtw_open_end": dtw_open_end,
+            "dtw_window_fraction": dtw_window_fraction,
+            "barycenter_init_iter": barycenter_init_iter,
+            "barycenter_update_iter": barycenter_update_iter,
         },
     }
 

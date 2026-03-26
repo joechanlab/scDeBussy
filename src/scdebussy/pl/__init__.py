@@ -1,5 +1,5 @@
-from ._metrics import purity_sweep_curve
+from ._metrics import cross_batch_purity_sweep
 
 __all__ = [
-    "purity_sweep_curve",
+    "cross_batch_purity_sweep",
 ]
