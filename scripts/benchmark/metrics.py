@@ -10,9 +10,54 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from scdebussy.tl import smooth_patient_trajectory as _smooth_patient_trajectory
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _warp_patient_trajectory_to_barycenter_grid(
+    patient_traj: np.ndarray,
+    warp_path: list,
+    n_bins: int,
+) -> np.ndarray:
+    """Project a per-patient smoothed trajectory onto the barycenter pseudotime grid.
+
+    For each barycenter bin *b*, this function averages the patient trajectory values
+    at all patient bins that the DTW warp path maps to *b*.  The result is an
+    (n_bins, n_genes) matrix aligned to the barycenter coordinate system.
+
+    Parameters
+    ----------
+    patient_traj:
+        Smoothed patient expression matrix of shape ``(n_bins, n_genes)``.
+    warp_path:
+        DTW warp path—each element is a ``(barycenter_bin_idx, patient_bin_idx)`` pair
+        as stored in ``adata.uns[barycenter_key]['warp_paths']``.
+    n_bins:
+        Number of barycenter bins (output rows).
+
+    Returns
+    -------
+    warped : np.ndarray, shape (n_bins, n_genes)
+    """
+    if not warp_path or patient_traj.size == 0:
+        n_genes = patient_traj.shape[1] if patient_traj.ndim > 1 else 1
+        return np.zeros((n_bins, n_genes), dtype=float)
+
+    n_genes = patient_traj.shape[1]
+    warped = np.zeros((n_bins, n_genes), dtype=float)
+    path = np.asarray(warp_path, dtype=int)
+    bary_idx = path[:, 0]
+    pat_idx = path[:, 1]
+
+    for b in range(n_bins):
+        sel = pat_idx[bary_idx == b]
+        if sel.size > 0:
+            warped[b] = patient_traj[sel].mean(axis=0)
+
+    return warped
 
 
 def _safe_pearson(x: np.ndarray, y: np.ndarray) -> float:
@@ -204,6 +249,13 @@ def compute_unsupervised_metrics(
 ) -> dict:
     """Compute unsupervised alignment quality metrics that do not require tau_global.
 
+    The primary signal is **cross-patient gene-expression agreement**: after alignment,
+    smoothed patient trajectories projected onto the shared barycenter grid are
+    pairwise-correlated (Pearson r).  High mean correlation means different patients
+    land at the same biological state at each pseudotime coordinate—the exact goal of
+    trajectory alignment.  This is a statistically valid proxy for Pearson r with
+    ground-truth pseudotime.
+
     Parameters
     ----------
     adata : AnnData
@@ -220,48 +272,88 @@ def compute_unsupervised_metrics(
     Returns
     -------
     result : dict
-        Keys: ``unsupervised_score``, ``warp_diagonal_deviation``,
-        ``warp_step_irregularity``, ``patient_hist_disagreement``,
-        ``barycenter_curvature``, ``density_coverage_penalty``.
+        Keys: ``unsupervised_score`` (lower = better),
+        ``mean_cross_patient_trajectory_corr`` (higher = better),
+        ``mean_barycenter_reconstruction_corr`` (higher = better),
+        ``patient_hist_disagreement``, ``density_coverage_penalty``.
     """
     if barycenter_key not in adata.uns:
         raise ValueError(f"{barycenter_key!r} not found in adata.uns.")
+    if key_added not in adata.obs:
+        raise ValueError(f"{key_added!r} is missing from adata.obs.")
+    if patient_key not in adata.obs:
+        raise ValueError(f"{patient_key!r} is missing from adata.obs.")
 
     meta = adata.uns[barycenter_key]
-    warp_paths = meta.get("warp_paths", [])
+    params = meta.get("params", {})
     bary_expr = np.asarray(meta.get("expression"), dtype=float)
 
     if bary_expr.ndim != 2:
         raise ValueError("Barycenter expression must be a 2D array of shape (n_bins, n_genes).")
 
     n_bins = int(bary_expr.shape[0])
-    denom = max(1, n_bins - 1)
+    patient_ids = meta.get("patient_ids", [])
+    warp_paths = meta.get("warp_paths", [])
 
-    diag_devs, step_irrs = [], []
-    for path in warp_paths:
-        if not path:
+    # -----------------------------------------------------------------------
+    # Recompute per-patient smoothed trajectories then project onto barycenter
+    # -----------------------------------------------------------------------
+    n_bins_param = int(params.get("n_bins", n_bins))
+    bandwidth = float(params.get("bandwidth", 0.1))
+    pseudotime_key_param = str(params.get("pseudotime_key", "s_local"))
+    patient_key_param = str(params.get("patient_key", patient_key))
+
+    warped_trajectories: list[np.ndarray] = []
+    for patient_id, warp_path in zip(patient_ids, warp_paths, strict=False):
+        try:
+            smoothed, _ = _smooth_patient_trajectory(
+                adata,
+                patient_id=patient_id,
+                patient_key=patient_key_param,
+                pseudotime_key=pseudotime_key_param,
+                n_bins=n_bins_param,
+                bandwidth=bandwidth,
+            )
+            smoothed_np = (
+                np.asarray(smoothed.detach().cpu(), dtype=float)
+                if hasattr(smoothed, "detach")
+                else np.asarray(smoothed, dtype=float)
+            )
+        except (ValueError, RuntimeError, AttributeError):
             continue
-        arr = np.asarray(path, dtype=int)
-        i_idx = arr[:, 0]
-        j_idx = arr[:, 1]
-        diag_devs.append(float(np.mean(np.abs(i_idx - j_idx)) / denom))
-        if j_idx.size > 1:
-            step_irrs.append(float(np.mean(np.abs(np.diff(j_idx) - 1))))
-        else:
-            step_irrs.append(0.0)
+        warped = _warp_patient_trajectory_to_barycenter_grid(smoothed_np, warp_path, n_bins)
+        warped_trajectories.append(warped)
 
-    warp_diagonal_deviation = float(np.mean(diag_devs)) if diag_devs else 1.0
-    warp_step_irregularity = float(np.mean(step_irrs)) if step_irrs else 1.0
+    # -----------------------------------------------------------------------
+    # Per-gene z-score normalisation across time before correlation
+    # (makes the metric scale-invariant across genes and hyperparameter runs)
+    # -----------------------------------------------------------------------
+    def _normalise_trajectory(mat: np.ndarray) -> np.ndarray:
+        mu = mat.mean(axis=0, keepdims=True)
+        sigma = mat.std(axis=0, keepdims=True)
+        return (mat - mu) / (sigma + 1e-8)
 
-    d1 = np.diff(bary_expr, axis=0)
-    d2 = np.diff(bary_expr, n=2, axis=0)
-    barycenter_curvature = float(np.linalg.norm(d2) / (np.linalg.norm(d1) + 1e-8))
+    patient_vecs = [_normalise_trajectory(w).flatten() for w in warped_trajectories]
+    bary_vec = _normalise_trajectory(bary_expr).flatten()
 
+    pairwise_corrs: list[float] = []
+    bary_recon_corrs: list[float] = []
+    for idx, pv in enumerate(patient_vecs):
+        bary_recon_corrs.append(_safe_pearson(bary_vec, pv))
+        for jdx in range(idx + 1, len(patient_vecs)):
+            pairwise_corrs.append(_safe_pearson(pv, patient_vecs[jdx]))
+
+    mean_cross_patient_corr = float(np.nanmean(pairwise_corrs)) if pairwise_corrs else 0.0
+    mean_bary_recon_corr = float(np.nanmean(bary_recon_corrs)) if bary_recon_corrs else 0.0
+
+    # -----------------------------------------------------------------------
+    # Patient-histogram disagreement on aligned pseudotime
+    # -----------------------------------------------------------------------
     aligned = adata.obs[key_added].to_numpy(dtype=float)
     patients = adata.obs[patient_key].to_numpy()
     bins = np.linspace(0.0, 1.0, n_hist_bins + 1)
 
-    histograms = []
+    histograms: list[np.ndarray] = []
     for pid in sorted(pd.unique(patients)):
         vals = aligned[patients == pid]
         vals = vals[np.isfinite(vals)]
@@ -273,15 +365,18 @@ def compute_unsupervised_metrics(
         histograms.append(h)
 
     if len(histograms) > 1:
-        pairwise = [
+        pairwise_hist = [
             float(np.mean(np.abs(histograms[a] - histograms[b])))
             for a in range(len(histograms))
             for b in range(a + 1, len(histograms))
         ]
-        patient_hist_disagreement = float(np.mean(pairwise))
+        patient_hist_disagreement = float(np.mean(pairwise_hist))
     else:
         patient_hist_disagreement = 0.0
 
+    # -----------------------------------------------------------------------
+    # Density coverage penalty
+    # -----------------------------------------------------------------------
     coverage_penalties = []
     for density in meta.get("patient_densities", {}).values():
         d = np.asarray(density, dtype=float)
@@ -289,19 +384,24 @@ def compute_unsupervised_metrics(
         coverage_penalties.append(float(np.mean(d < 0.02)))
     density_coverage_penalty = float(np.mean(coverage_penalties)) if coverage_penalties else 0.0
 
+    # -----------------------------------------------------------------------
+    # Composite score — lower is better
+    # Primary (55 %): cross-patient expression agreement (higher corr = lower score)
+    # Secondary (25 %): barycenter reconstruction quality (higher corr = lower score)
+    # Tertiary (15 %): histogram disagreement on aligned pseudotime
+    # Minor (5 %): density coverage penalty
+    # -----------------------------------------------------------------------
     unsupervised_score = (
-        0.40 * warp_diagonal_deviation
-        + 0.20 * warp_step_irregularity
-        + 0.20 * patient_hist_disagreement
-        + 0.15 * barycenter_curvature
+        0.55 * (1.0 - mean_cross_patient_corr)
+        + 0.25 * (1.0 - mean_bary_recon_corr)
+        + 0.15 * patient_hist_disagreement
         + 0.05 * density_coverage_penalty
     )
 
     return {
         "unsupervised_score": float(unsupervised_score),
-        "warp_diagonal_deviation": float(warp_diagonal_deviation),
-        "warp_step_irregularity": float(warp_step_irregularity),
+        "mean_cross_patient_trajectory_corr": float(mean_cross_patient_corr),
+        "mean_barycenter_reconstruction_corr": float(mean_bary_recon_corr),
         "patient_hist_disagreement": float(patient_hist_disagreement),
-        "barycenter_curvature": float(barycenter_curvature),
         "density_coverage_penalty": float(density_coverage_penalty),
     }

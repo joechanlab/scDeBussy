@@ -2,13 +2,15 @@
 
 Usage
 -----
-    python scripts/benchmark/compare_methods.py \
-        --results_dir /scratch/chanj3/wangm10/compare_run \
-        --output /scratch/chanj3/wangm10/compare_run/comparison_summary.csv
+python scripts/benchmark/compare_methods.py \
+    --results_dir /scratch/chanj3/wangm10/compare_run_tuning \
+    --tuning true \
+    --output /scratch/chanj3/wangm10/compare_run_tuning/comparison_summary.csv
 
 Optional flags:
     --methods   identity scdebussy cellalign_fixed_reference
     --scenarios warp_medium noise_heavy combined_challenge
+    --tuning    all|true|false filter rows by tuning_enabled
     --parquet   also write a parquet file alongside the CSV
 
 Outputs
@@ -53,6 +55,7 @@ _METRICS: list[tuple[str, str, bool | None]] = [
 
 _PRIMARY_METRIC = "aligned_global_pearson_r"
 _PRIMARY_HIGHER_IS_BETTER = True
+_TUNING_CHOICES = ("all", "true", "false")
 
 
 def _single_axis_subset(df: pd.DataFrame) -> pd.DataFrame:
@@ -69,6 +72,65 @@ def _pairwise_only_subset(df: pd.DataFrame) -> pd.DataFrame:
         return df.iloc[0:0].copy()
     mask = df["evaluation_mode"] == "pairwise_only"
     return df.loc[mask].copy()
+
+
+def _filter_by_tuning(df: pd.DataFrame, tuning: str) -> pd.DataFrame:
+    """Restrict rows by tuning_enabled when requested."""
+    if tuning == "all":
+        return df.copy()
+
+    if "tuning_enabled" not in df.columns:
+        raise SystemExit(
+            "[compare] Requested --tuning filter, but results do not contain tuning_enabled. "
+            "Re-run aggregation on benchmark outputs written by the updated run_scenario.py."
+        )
+
+    want_enabled = tuning == "true"
+    mask = df["tuning_enabled"].fillna(False).astype(bool) == want_enabled
+    filtered = df.loc[mask].copy()
+    if filtered.empty:
+        raise SystemExit(f"[compare] No rows remain after applying --tuning {tuning}.")
+    return filtered
+
+
+def _report_tuning_filter_effects(
+    df_before: pd.DataFrame,
+    df_after: pd.DataFrame,
+    *,
+    tuning: str,
+    requested_methods: list[str] | None,
+) -> None:
+    """Print per-method diagnostics when --tuning drops requested methods."""
+    if tuning == "all" or df_before.empty:
+        return
+
+    methods_before = set(df_before["method"].unique())
+    methods_after = set(df_after["method"].unique())
+
+    if requested_methods:
+        target_methods = [m for m in requested_methods if m in methods_before]
+    else:
+        target_methods = sorted(methods_before)
+
+    dropped = [m for m in target_methods if m not in methods_after]
+    if not dropped:
+        return
+
+    print(f"[compare] Methods removed by --tuning {tuning}: {sorted(dropped)}")
+    if "tuning_enabled" not in df_before.columns:
+        return
+
+    for method in sorted(dropped):
+        method_rows = df_before[df_before["method"] == method]
+        n_rows = int(len(method_rows))
+        n_tuned = int(method_rows["tuning_enabled"].fillna(False).astype(bool).sum())
+        n_untuned = n_rows - n_tuned
+        print(f"[compare]   - {method}: total_rows={n_rows}, tuned_rows={n_tuned}, untuned_rows={n_untuned}")
+
+    if tuning == "true":
+        print("[compare] Hint: use --tuning all to include both tuned and untuned rows.")
+    else:
+        print("[compare] Hint: use --tuning all to include both tuned and untuned rows.")
 
 
 # ---------------------------------------------------------------------------
@@ -98,10 +160,19 @@ def _rank_within_group(grp: pd.DataFrame, col: str, higher_is_better: bool) -> p
 def build_scenario_summary(df: pd.DataFrame) -> pd.DataFrame:
     """Return mean ± std across seeds for each (method, scenario, metric)."""
     metric_cols = [m[0] for m in _METRICS if m[0] in df.columns]
-    agg = df.groupby(["method", "scenario"])[metric_cols].agg(["mean", "std"])
+    grouped = df.groupby(["method", "scenario"])
+    agg = grouped[metric_cols].agg(["mean", "std"])
     # Flatten multiindex columns → "pearson_r_mean", etc.
     agg.columns = [f"{col}_{stat}" for col, stat in agg.columns]
-    agg["n_seeds"] = df.groupby(["method", "scenario"]).size()
+    agg["n_seeds"] = grouped.size()
+
+    if "tuning_enabled" in df.columns:
+        agg["tuning_enabled_all"] = grouped["tuning_enabled"].all()
+    if "tuning_n_trials" in df.columns:
+        agg["tuning_n_trials_mean"] = grouped["tuning_n_trials"].mean()
+    if "tuning_best_score" in df.columns:
+        agg["tuning_best_score_mean"] = grouped["tuning_best_score"].mean()
+
     return agg.reset_index()
 
 
@@ -189,7 +260,17 @@ def build_global_ranking(df: pd.DataFrame) -> pd.DataFrame:
     extra_cols = [m[0] for m in _METRICS if m[0] in df.columns and m[0] != primary]
     agg_extra = df.groupby("method")[extra_cols].mean()
 
-    ranking = pd.concat([mean_rank, win_rate, mean_z, agg_extra], axis=1).reindex(methods)
+    tuning_frames = []
+    if "tuning_enabled" in df.columns:
+        tuning_frames.append(df.groupby("method")["tuning_enabled"].all().rename("tuning_enabled"))
+    if "tuning_n_trials" in df.columns:
+        tuning_frames.append(df.groupby("method")["tuning_n_trials"].mean().rename("tuning_n_trials"))
+    if "tuning_best_score" in df.columns:
+        tuning_frames.append(df.groupby("method")["tuning_best_score"].mean().rename("tuning_best_score"))
+
+    extra_parts = [mean_rank, win_rate, mean_z, agg_extra, *tuning_frames]
+
+    ranking = pd.concat(extra_parts, axis=1).reindex(methods)
     ranking.index.name = "method"
 
     # Overall rank: sort by win_rate desc, break ties by mean_rank asc
@@ -359,6 +440,9 @@ def print_global_ranking(ranking: pd.DataFrame) -> None:
     display_cols = [
         "overall_rank",
         "method",
+        "tuning_enabled",
+        "tuning_n_trials",
+        "tuning_best_score",
         "win_rate",
         "mean_rank",
         "mean_z_score",
@@ -374,6 +458,13 @@ def print_global_ranking(ranking: pd.DataFrame) -> None:
     fmt_df = ranking[display_cols].copy()
     for col in fmt_df.columns:
         if col in ("overall_rank", "method"):
+            continue
+        if col == "tuning_enabled":
+            fmt_df[col] = fmt_df[col].map(
+                lambda x: (
+                    "—" if (x is None or (isinstance(x, float) and np.isnan(x))) else ("true" if bool(x) else "false")
+                )
+            )
             continue
         fmt_df[col] = fmt_df[col].apply(
             lambda x: (
@@ -404,6 +495,8 @@ def print_pairwise_only_summary(df: pd.DataFrame) -> None:
     cols = [
         "method",
         "scenario",
+        "tuning_enabled",
+        "tuning_n_trials",
         "runtime_s",
         "unsupervised_method_fraction_failed_pairs",
     ]
@@ -414,6 +507,10 @@ def print_pairwise_only_summary(df: pd.DataFrame) -> None:
         return
 
     grouped = df.groupby(["method", "scenario"], sort=True)[available[2:]].mean(numeric_only=True).reset_index()
+    if "tuning_enabled" in df.columns:
+        grouped["tuning_enabled"] = (
+            df.groupby(["method", "scenario"], sort=True)["tuning_enabled"].all().reset_index(drop=True)
+        )
     print(_try_tabulate(grouped, tablefmt="simple"))
     print()
 
@@ -490,16 +587,32 @@ def main() -> None:
     parser.add_argument(
         "--scenarios", nargs="*", default=None, help="Restrict to these scenarios (default: all found)."
     )
+    parser.add_argument(
+        "--tuning",
+        default="all",
+        choices=list(_TUNING_CHOICES),
+        help="Filter rows by tuning_enabled: all=keep all results, true=only tuned runs, false=only untuned runs.",
+    )
     parser.add_argument("--parquet", action="store_true", help="Also write parquet alongside the CSV.")
     args = parser.parse_args()
 
     print(f"\n[compare] Loading results from: {args.results_dir}")
-    df = load_results(args.results_dir, scenarios=args.scenarios, methods=args.methods)
+    df_all = load_results(args.results_dir, scenarios=args.scenarios, methods=args.methods)
+    df = _filter_by_tuning(df_all, args.tuning)
+    _report_tuning_filter_effects(
+        df_all,
+        df,
+        tuning=args.tuning,
+        requested_methods=args.methods,
+    )
     print(
         f"[compare] Loaded {len(df)} rows  ·  "
         f"methods: {sorted(df['method'].unique())}  ·  "
         f"scenarios: {sorted(df['scenario'].unique())}"
     )
+    if "tuning_enabled" in df.columns:
+        tuned_rows = int(df["tuning_enabled"].fillna(False).astype(bool).sum())
+        print(f"[compare] Tuning filter={args.tuning}  ·  tuned rows: {tuned_rows}/{len(df)}")
 
     axis_df = _single_axis_subset(df)
     pairwise_df = _pairwise_only_subset(df)

@@ -28,6 +28,7 @@ import time
 import numpy as np
 
 import scdebussy.tl as tl
+from scdebussy import is_method_tunable, tune_method
 
 # ---------------------------------------------------------------------------
 # Ensure the package is importable when running from the repo root
@@ -53,6 +54,9 @@ def _run_one(
     *,
     method: str,
     method_overrides: dict | None = None,
+    tune: str = "auto",
+    tune_trials: int = 30,
+    tune_seed: int = 42,
 ) -> dict:
     from scripts.benchmark.methods import run_method
     from scripts.benchmark.metrics import (
@@ -94,6 +98,49 @@ def _run_one(
 
     if method_overrides:
         method_kwargs.update(method_overrides)
+
+    tuning_info = {
+        "enabled": False,
+        "mode": tune,
+    }
+
+    if tune not in {"off", "auto", "force"}:
+        raise ValueError("tune must be one of {'off', 'auto', 'force'}.")
+
+    should_tune = tune in {"auto", "force"} and is_method_tunable(method)
+    if tune == "force" and not is_method_tunable(method):
+        raise ValueError(f"Method {method!r} does not expose a formal package tuning API.")
+
+    if should_tune:
+        try:
+            tuning_result = tune_method(
+                method,
+                adata,
+                method_params=method_kwargs,
+                n_trials=tune_trials,
+                seed=tune_seed,
+                objective="unsupervised",
+                verbose=False,
+            )
+            method_kwargs = dict(tuning_result.best_params)
+            tuning_info = {
+                "enabled": True,
+                "mode": tune,
+                "objective": tuning_result.objective,
+                "n_trials": tuning_result.n_trials,
+                "n_successful_trials": tuning_result.n_successful_trials,
+                "best_score": tuning_result.best_score,
+                "best_params": dict(tuning_result.best_params),
+            }
+        except Exception as exc:
+            if tune == "force":
+                raise
+            tuning_info = {
+                "enabled": False,
+                "mode": tune,
+                "error": str(exc),
+                "fallback": "untuned_method_params",
+            }
 
     patient_key = method_kwargs.get("patient_key", "patient")
     baseline_key = method_kwargs.get("pseudotime_key", "s_local")
@@ -197,6 +244,7 @@ def _run_one(
         "unsupervised": unsupervised_combined,
         "unsupervised_generic": generic_unsupervised,
         "unsupervised_method": unsupervised_method,
+        "tuning": tuning_info,
     }
     if method == "scdebussy":
         result["scdebussy_params"] = dict(method_params_out)
@@ -288,6 +336,14 @@ def main():
     parser.add_argument(
         "--scdebussy_params", default=None, help="Deprecated alias for --method_params when --method=scdebussy."
     )
+    parser.add_argument(
+        "--tune",
+        default="auto",
+        choices=["off", "auto", "force"],
+        help="Method tuning mode: off=never tune, auto=tune supported methods, force=error if method not tunable.",
+    )
+    parser.add_argument("--tune_trials", default=30, type=int, help="Optuna trials per tuned run.")
+    parser.add_argument("--tune_seed", default=42, type=int, help="Optuna sampler random seed.")
     args = parser.parse_args()
 
     overrides = None
@@ -310,6 +366,9 @@ def main():
         args.seed,
         method=args.method,
         method_overrides=overrides,
+        tune=args.tune,
+        tune_trials=args.tune_trials,
+        tune_seed=args.tune_seed,
     )
     out_path = _write_result(result, args.output_dir)
 

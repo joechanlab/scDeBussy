@@ -183,10 +183,13 @@ def _fit_barycenter_from_trajectories(
     dtw_window_fraction,
     barycenter_init_iter,
     barycenter_update_iter,
+    iteration_callback=None,
 ):
     barycenter = softdtw_barycenter(X=patient_trajectories, gamma=gamma, max_iter=barycenter_init_iter)
     prev_cost = float("inf")
     warp_paths = []
+    iteration_costs: list[float] = []
+    converged = False
 
     for iteration in range(max_iter):
         cropped_trajectories = []
@@ -213,10 +216,24 @@ def _fit_barycenter_from_trajectories(
             end_idx = alignment.index2.max()
             cropped_trajectories.append(trajectory[start_idx : end_idx + 1])
 
+        iteration_costs.append(float(total_cost))
+
+        if iteration_callback is not None:
+            try:
+                iteration_callback(
+                    iteration=int(iteration + 1),
+                    total_cost=float(total_cost),
+                    warp_paths=warp_paths,
+                )
+            except (ValueError, TypeError, RuntimeError, FloatingPointError, KeyError, IndexError):
+                # Diagnostics callbacks must never interrupt alignment.
+                pass
+
         if verbose:
             print(f"Iter {iteration + 1:02d} | Cost: {total_cost:.4f}")
 
         if abs(prev_cost - total_cost) < tol:
+            converged = True
             if verbose:
                 print("Convergence reached.")
             break
@@ -229,7 +246,15 @@ def _fit_barycenter_from_trajectories(
             init=barycenter,
         )
 
-    return barycenter, warp_paths
+    diagnostics = {
+        "iteration_costs": iteration_costs,
+        "final_iteration": int(len(iteration_costs)),
+        "converged": bool(converged),
+        "final_cost": float(iteration_costs[-1]) if iteration_costs else None,
+        "tolerance": float(tol),
+        "max_iterations": int(max_iter),
+    }
+    return barycenter, warp_paths, diagnostics
 
 
 def _warp_path_to_grid_mapping(warp_path, n_bins):
@@ -308,6 +333,8 @@ def scDeBussy(
     dtw_window_fraction=0.2,
     barycenter_init_iter=5,
     barycenter_update_iter=1,
+    rmse_truth_key="tau_global",
+    log_iteration_rmse_if_available=True,
 ):
     """
     Align per-patient pseudotime trajectories onto a shared barycenter.
@@ -350,6 +377,12 @@ def scDeBussy(
         Number of Soft-DTW barycenter iterations used for initialization.
     barycenter_update_iter : int
         Number of Soft-DTW barycenter iterations used in each EM M-step.
+    rmse_truth_key : str
+        Optional ground-truth pseudotime key in ``adata.obs`` used to log
+        per-iteration RMSE diagnostics when available (synthetic runs).
+    log_iteration_rmse_if_available : bool
+        Whether to compute and record per-iteration RMSE to ``rmse_truth_key``
+        during EM iterations when the truth key is present.
 
     Returns
     -------
@@ -381,7 +414,39 @@ def scDeBussy(
         patient_trajectories.append(smoothed.detach().cpu().numpy())
         patient_densities[str(patient_id)] = density.detach().cpu().numpy()
 
-    barycenter, warp_paths = _fit_barycenter_from_trajectories(
+    iteration_rmse_to_truth: list[float] = []
+    baseline_rmse_to_truth = None
+    truth_values = None
+    iteration_callback = None
+
+    if log_iteration_rmse_if_available and rmse_truth_key and rmse_truth_key in adata.obs:
+        truth_values = adata.obs[rmse_truth_key].to_numpy(dtype=float)
+        baseline_values = adata.obs[pseudotime_key].to_numpy(dtype=float)
+        baseline_mask = np.isfinite(truth_values) & np.isfinite(baseline_values)
+        if np.any(baseline_mask):
+            baseline_rmse_to_truth = float(
+                np.sqrt(np.mean((baseline_values[baseline_mask] - truth_values[baseline_mask]) ** 2))
+            )
+
+        def _iteration_callback(iteration, total_cost, warp_paths):
+            aligned_iter = _map_cells_to_aligned_pseudotime(
+                adata,
+                patient_ids=patient_ids,
+                patient_key=patient_key,
+                pseudotime_key=pseudotime_key,
+                warp_paths=warp_paths,
+                n_bins=n_bins,
+            )
+            mask = np.isfinite(truth_values) & np.isfinite(aligned_iter)
+            if np.any(mask):
+                rmse = float(np.sqrt(np.mean((aligned_iter[mask] - truth_values[mask]) ** 2)))
+            else:
+                rmse = float("nan")
+            iteration_rmse_to_truth.append(rmse)
+
+        iteration_callback = _iteration_callback
+
+    barycenter, warp_paths, em_convergence = _fit_barycenter_from_trajectories(
         patient_trajectories=patient_trajectories,
         n_bins=n_bins,
         gamma=gamma,
@@ -395,6 +460,7 @@ def scDeBussy(
         dtw_window_fraction=dtw_window_fraction,
         barycenter_init_iter=barycenter_init_iter,
         barycenter_update_iter=barycenter_update_iter,
+        iteration_callback=iteration_callback,
     )
 
     adata.obs[key_added] = _map_cells_to_aligned_pseudotime(
@@ -406,12 +472,26 @@ def scDeBussy(
         n_bins=n_bins,
     )
 
+    final_rmse_to_truth = None
+    if truth_values is not None:
+        aligned_values = adata.obs[key_added].to_numpy(dtype=float)
+        final_mask = np.isfinite(truth_values) & np.isfinite(aligned_values)
+        if np.any(final_mask):
+            final_rmse_to_truth = float(np.sqrt(np.mean((aligned_values[final_mask] - truth_values[final_mask]) ** 2)))
+
+    if iteration_rmse_to_truth:
+        em_convergence["rmse_truth_key"] = rmse_truth_key
+        em_convergence["iteration_rmse_to_truth"] = [float(v) for v in iteration_rmse_to_truth]
+        em_convergence["baseline_rmse_to_truth"] = baseline_rmse_to_truth
+        em_convergence["final_rmse_to_truth"] = final_rmse_to_truth
+
     adata.uns[barycenter_key] = {
         "aligned_pseudotime": np.linspace(0, 1, n_bins),
         "expression": barycenter,
         "patient_ids": list(patient_ids),
         "warp_paths": [[(int(i), int(j)) for i, j in warp_path] for warp_path in warp_paths],
         "patient_densities": patient_densities,
+        "em_convergence": em_convergence,
         "params": {
             "patient_key": patient_key,
             "pseudotime_key": pseudotime_key,

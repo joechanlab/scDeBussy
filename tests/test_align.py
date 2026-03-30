@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 from scripts.benchmark.compare_methods import (
+    _filter_by_tuning,
     _pairwise_only_subset,
     _single_axis_subset,
     build_global_ranking,
@@ -8,6 +9,7 @@ from scripts.benchmark.compare_methods import (
 )
 from scripts.benchmark.methods import available_methods
 
+from scdebussy.pl import plot_em_convergence, plot_runtime_performance_tradeoff, plot_sweep_history
 from scdebussy.tl import scDeBussy, smooth_patient_trajectory
 
 
@@ -30,7 +32,69 @@ def test_scDeBussy_writes_results_to_anndata(sample_adata):
     assert len(barycenter["aligned_pseudotime"]) == 12
     assert barycenter["patient_ids"] == ["patient1", "patient2"]
     assert len(barycenter["warp_paths"]) == 2
+    assert "em_convergence" in barycenter
+    assert len(barycenter["em_convergence"]["iteration_costs"]) >= 1
+    assert "converged" in barycenter["em_convergence"]
     assert sample_adata.obs["aligned_pseudotime"].notna().all()
+
+
+def test_plot_em_convergence_returns_figure(sample_adata):
+    scDeBussy(
+        sample_adata,
+        patient_key="patient",
+        pseudotime_key="s_local",
+        n_bins=12,
+        bandwidth=0.15,
+        max_iter=3,
+    )
+
+    fig = plot_em_convergence(sample_adata, barycenter_key="barycenter")
+    assert fig is not None
+    assert hasattr(fig, "axes")
+
+
+def test_plot_sweep_history_and_runtime_tradeoff_return_figures():
+    import pandas as pd
+
+    sweep_df = pd.DataFrame(
+        [
+            {"trial": 1, "objective_score": 0.42, "status": "ok"},
+            {"trial": 2, "objective_score": 0.31, "status": "ok"},
+            {"trial": 3, "objective_score": 0.36, "status": "ok"},
+        ]
+    )
+    fig_sweep = plot_sweep_history(sweep_df)
+    assert fig_sweep is not None
+
+    ranking_df = pd.DataFrame(
+        [
+            {"method": "scdebussy", "runtime_s": 5.2, "aligned_global_pearson_r": 0.93},
+            {"method": "genes2genes_consensus", "runtime_s": 1800.0, "aligned_global_pearson_r": 0.88},
+        ]
+    )
+    fig_tradeoff = plot_runtime_performance_tradeoff(ranking_df)
+    assert fig_tradeoff is not None
+
+
+def test_scDeBussy_logs_iteration_rmse_for_synthetic_truth(sample_adata):
+    adata = sample_adata.copy()
+    adata.obs["tau_global"] = adata.obs["s_local"].to_numpy(dtype=float)
+
+    scDeBussy(
+        adata,
+        patient_key="patient",
+        pseudotime_key="s_local",
+        n_bins=12,
+        bandwidth=0.15,
+        max_iter=3,
+    )
+
+    em = adata.uns["barycenter"]["em_convergence"]
+    assert "iteration_rmse_to_truth" in em
+    assert len(em["iteration_rmse_to_truth"]) == len(em["iteration_costs"])
+    assert em["rmse_truth_key"] == "tau_global"
+    assert em["baseline_rmse_to_truth"] is not None
+    assert em["final_rmse_to_truth"] is not None
 
 
 def test_scDeBussy_preserves_patientwise_monotonicity(sample_adata):
@@ -176,6 +240,57 @@ def test_compare_methods_handles_pairwise_only_inputs_without_ranking_failure():
     assert axis_df.empty
     assert ranking.empty
     assert h2h.empty
+
+
+def test_compare_methods_can_filter_to_tuned_rows_only():
+    import pandas as pd
+
+    df = pd.DataFrame(
+        [
+            {"method": "scdebussy", "scenario": "clean_baseline", "seed": 0, "tuning_enabled": True},
+            {"method": "identity", "scenario": "clean_baseline", "seed": 0, "tuning_enabled": False},
+        ]
+    )
+
+    filtered = _filter_by_tuning(df, "true")
+
+    assert list(filtered["method"]) == ["scdebussy"]
+
+
+def test_compare_methods_global_ranking_keeps_tuning_columns():
+    import pandas as pd
+
+    df = pd.DataFrame(
+        [
+            {
+                "method": "scdebussy",
+                "evaluation_mode": "single_axis",
+                "scenario": "clean_baseline",
+                "seed": 0,
+                "aligned_global_pearson_r": 0.95,
+                "runtime_s": 1.0,
+                "tuning_enabled": True,
+                "tuning_n_trials": 30,
+                "tuning_best_score": 0.12,
+            },
+            {
+                "method": "cellalign_consensus",
+                "evaluation_mode": "single_axis",
+                "scenario": "clean_baseline",
+                "seed": 0,
+                "aligned_global_pearson_r": 0.91,
+                "runtime_s": 2.0,
+                "tuning_enabled": True,
+                "tuning_n_trials": 30,
+                "tuning_best_score": 0.18,
+            },
+        ]
+    )
+
+    ranking = build_global_ranking(df)
+
+    assert {"tuning_enabled", "tuning_n_trials", "tuning_best_score"}.issubset(ranking.columns)
+    assert ranking["tuning_enabled"].tolist() == [True, True]
 
 
 def test_genes2genes_ambiguous_alias_is_not_registered():

@@ -437,6 +437,9 @@ def _run_cellalign_bridge_call(
     bridge_script_abs: str,
     rscript_bin: str,
     timeout_s: int,
+    num_pts: int,
+    win_sz: float,
+    dist_method: str,
     mode: str,
     source_patient: str | None = None,
     target_patient: str | None = None,
@@ -466,6 +469,12 @@ def _run_cellalign_bridge_call(
             output_dir,
             "--mode",
             mode,
+            "--num_pts",
+            str(num_pts),
+            "--win_sz",
+            str(win_sz),
+            "--dist_method",
+            dist_method,
         ]
         if source_patient is not None:
             cmd.extend(["--source_patient", source_patient])
@@ -491,6 +500,9 @@ def _run_cellalign_bridge_call(
             "bridge_stdout_tail": proc.stdout[-2000:],
             "io_meta": io_meta,
             "mode": mode,
+            "num_pts": num_pts,
+            "win_sz": win_sz,
+            "dist_method": dist_method,
             "source_patient": source_patient,
             "target_patient": target_patient,
         }
@@ -570,6 +582,17 @@ def run_scdebussy(adata, method_params: dict) -> dict:
 
     aligned_key = params.get("key_added", "aligned_pseudotime")
     barycenter_key = params.get("barycenter_key", "barycenter")
+    barycenter_meta = adata.uns.get(barycenter_key, {}) if hasattr(adata, "uns") else {}
+    em_convergence = barycenter_meta.get("em_convergence", {}) if isinstance(barycenter_meta, dict) else {}
+
+    unsupervised_method = {}
+    if isinstance(em_convergence, dict):
+        if "final_iteration" in em_convergence:
+            unsupervised_method["em_final_iteration"] = em_convergence["final_iteration"]
+        if "converged" in em_convergence:
+            unsupervised_method["em_converged"] = bool(em_convergence["converged"])
+        if "final_cost" in em_convergence:
+            unsupervised_method["em_final_cost"] = em_convergence["final_cost"]
 
     return {
         "evaluation_mode": "single_axis",
@@ -578,8 +601,9 @@ def run_scdebussy(adata, method_params: dict) -> dict:
         "method_meta": {
             "barycenter_key": barycenter_key,
             "backend": "python",
+            "em_convergence": em_convergence,
         },
-        "unsupervised_method": {},
+        "unsupervised_method": unsupervised_method,
     }
 
 
@@ -618,7 +642,17 @@ def _cellalign_common_params(method_params: dict) -> dict:
     rscript_bin = params.get("rscript_bin", "Rscript")
     timeout_s = int(params.get("timeout_s", 3600))
     dry_run = bool(params.get("dry_run", False))
+    num_pts = int(params.get("num_pts", 200))
+    win_sz = float(params.get("win_sz", 0.1))
+    dist_method = str(params.get("dist_method", "Euclidean"))
     bridge_script_abs = os.path.abspath(bridge_script)
+
+    if num_pts < 3:
+        raise ValueError("cellalign num_pts must be at least 3.")
+    if not np.isfinite(win_sz) or win_sz <= 0:
+        raise ValueError("cellalign win_sz must be a positive finite number.")
+    if dist_method not in {"Euclidean", "Correlation"}:
+        raise ValueError("cellalign dist_method must be one of {'Euclidean', 'Correlation'}.")
 
     return {
         "params": params,
@@ -627,6 +661,9 @@ def _cellalign_common_params(method_params: dict) -> dict:
         "rscript_bin": rscript_bin,
         "timeout_s": timeout_s,
         "dry_run": dry_run,
+        "num_pts": num_pts,
+        "win_sz": win_sz,
+        "dist_method": dist_method,
         "bridge_script_abs": bridge_script_abs,
     }
 
@@ -966,6 +1003,9 @@ def run_cellalign_fixed_reference(adata, method_params: dict) -> dict:
     rscript_bin = common["rscript_bin"]
     timeout_s = common["timeout_s"]
     dry_run = common["dry_run"]
+    num_pts = common["num_pts"]
+    win_sz = common["win_sz"]
+    dist_method = common["dist_method"]
     bridge_script_abs = common["bridge_script_abs"]
     key_added = params.get("key_added", "aligned_pseudotime_cellalign_fixed_reference")
     reference_policy = params.get("reference_policy", "medoid")
@@ -1003,6 +1043,9 @@ def run_cellalign_fixed_reference(adata, method_params: dict) -> dict:
                 bridge_script_abs=bridge_script_abs,
                 rscript_bin=rscript_bin,
                 timeout_s=timeout_s,
+                num_pts=num_pts,
+                win_sz=win_sz,
+                dist_method=dist_method,
                 mode="pairwise_fixed_reference",
                 source_patient=pid,
                 target_patient=reference_patient,
@@ -1021,6 +1064,9 @@ def run_cellalign_fixed_reference(adata, method_params: dict) -> dict:
                 bridge_script_abs=bridge_script_abs,
                 rscript_bin=rscript_bin,
                 timeout_s=timeout_s,
+                num_pts=num_pts,
+                win_sz=win_sz,
+                dist_method=dist_method,
                 mode="pairwise_fixed_reference",
                 source_patient=pid,
                 target_patient=reference_patient,
@@ -1053,6 +1099,9 @@ def run_cellalign_fixed_reference(adata, method_params: dict) -> dict:
             "bridge_script": bridge_script_abs,
             "reference_policy": reference_policy,
             "reference_patient": reference_patient,
+            "num_pts": num_pts,
+            "win_sz": win_sz,
+            "dist_method": dist_method,
             "pair_records": pair_records,
             **summary,
         },
@@ -1072,6 +1121,9 @@ def run_cellalign_pairwise(adata, method_params: dict) -> dict:
     rscript_bin = common["rscript_bin"]
     timeout_s = common["timeout_s"]
     dry_run = common["dry_run"]
+    num_pts = common["num_pts"]
+    win_sz = common["win_sz"]
+    dist_method = common["dist_method"]
     bridge_script_abs = common["bridge_script_abs"]
 
     if not os.path.exists(bridge_script_abs):
@@ -1092,6 +1144,9 @@ def run_cellalign_pairwise(adata, method_params: dict) -> dict:
                     bridge_script_abs=bridge_script_abs,
                     rscript_bin=rscript_bin,
                     timeout_s=timeout_s,
+                    num_pts=num_pts,
+                    win_sz=win_sz,
+                    dist_method=dist_method,
                     mode="pairwise_native",
                     source_patient=source_patient,
                     target_patient=target_patient,
@@ -1110,6 +1165,9 @@ def run_cellalign_pairwise(adata, method_params: dict) -> dict:
                     bridge_script_abs=bridge_script_abs,
                     rscript_bin=rscript_bin,
                     timeout_s=timeout_s,
+                    num_pts=num_pts,
+                    win_sz=win_sz,
+                    dist_method=dist_method,
                     mode="pairwise_native",
                     source_patient=source_patient,
                     target_patient=target_patient,
@@ -1132,6 +1190,9 @@ def run_cellalign_pairwise(adata, method_params: dict) -> dict:
         "method_meta": {
             "backend": "Rscript",
             "bridge_script": bridge_script_abs,
+            "num_pts": num_pts,
+            "win_sz": win_sz,
+            "dist_method": dist_method,
             "pair_records": pair_records,
             **summary,
         },
@@ -1156,6 +1217,9 @@ def run_cellalign_consensus(adata, method_params: dict) -> dict:
     rscript_bin = common["rscript_bin"]
     timeout_s = common["timeout_s"]
     dry_run = common["dry_run"]
+    num_pts = common["num_pts"]
+    win_sz = common["win_sz"]
+    dist_method = common["dist_method"]
     bridge_script_abs = common["bridge_script_abs"]
     key_added = params.get("key_added", "aligned_pseudotime_cellalign_consensus")
 
@@ -1180,6 +1244,9 @@ def run_cellalign_consensus(adata, method_params: dict) -> dict:
                     bridge_script_abs=bridge_script_abs,
                     rscript_bin=rscript_bin,
                     timeout_s=timeout_s,
+                    num_pts=num_pts,
+                    win_sz=win_sz,
+                    dist_method=dist_method,
                     mode="pairwise_consensus",
                     source_patient=source_patient,
                     target_patient=target_patient,
@@ -1198,6 +1265,9 @@ def run_cellalign_consensus(adata, method_params: dict) -> dict:
                     bridge_script_abs=bridge_script_abs,
                     rscript_bin=rscript_bin,
                     timeout_s=timeout_s,
+                    num_pts=num_pts,
+                    win_sz=win_sz,
+                    dist_method=dist_method,
                     mode="pairwise_consensus",
                     source_patient=source_patient,
                     target_patient=target_patient,
@@ -1231,6 +1301,9 @@ def run_cellalign_consensus(adata, method_params: dict) -> dict:
             "backend": "Rscript",
             "bridge_script": bridge_script_abs,
             "consensus_strategy": "mean_over_pairwise_contexts",
+            "num_pts": num_pts,
+            "win_sz": win_sz,
+            "dist_method": dist_method,
             "pair_records": pair_records,
             **summary,
         },
@@ -1240,67 +1313,3 @@ def run_cellalign_consensus(adata, method_params: dict) -> dict:
             "min_pair_count_per_cell": float(np.min(counts)),
         },
     }
-
-    with tempfile.TemporaryDirectory(prefix="cellalign_bridge_") as tmpdir:
-        input_dir = os.path.join(tmpdir, "input")
-        output_dir = os.path.join(tmpdir, "output")
-        os.makedirs(input_dir, exist_ok=True)
-        os.makedirs(output_dir, exist_ok=True)
-
-        io_meta = _write_cellalign_bridge_inputs(
-            adata,
-            input_dir=input_dir,
-            patient_key=patient_key,
-            pseudotime_key=pseudotime_key,
-        )
-
-        if dry_run:
-            raise RuntimeError(
-                "cellalign adapter dry_run=True: bridge input schema written successfully. "
-                "Set dry_run=False to execute Rscript bridge."
-            )
-
-        if not os.path.exists(bridge_script_abs):
-            raise FileNotFoundError(
-                f"cellalign bridge script not found: {bridge_script_abs}. "
-                "Create it or pass method_params.bridge_script."
-            )
-
-        cmd = [
-            rscript_bin,
-            bridge_script_abs,
-            "--input_dir",
-            input_dir,
-            "--output_dir",
-            output_dir,
-        ]
-        proc = subprocess.run(
-            cmd,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-        )
-        if proc.returncode != 0:
-            raise RuntimeError(
-                f"cellalign bridge failed. Command: {' '.join(cmd)}\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
-            )
-
-        aligned, bridge_metrics = _read_cellalign_bridge_outputs(output_dir, io_meta["n_cells"])
-        aligned = _safe_minmax_scale(aligned)
-        adata.obs[key_added] = aligned
-
-        method_meta = {
-            "backend": "Rscript",
-            "bridge_script": bridge_script_abs,
-            "input_schema_version": 1,
-            "bridge_stdout_tail": proc.stdout[-2000:],
-        }
-        method_meta.update({k: v for k, v in io_meta.items() if k in {"n_cells", "n_genes"}})
-
-        return {
-            "aligned_key": key_added,
-            "method_params": params,
-            "method_meta": method_meta,
-            "unsupervised_method": bridge_metrics,
-        }

@@ -26,6 +26,7 @@ classifiers = [
 dependencies = [
   "anndata",
   "gseapy",
+  "optuna",
   "pycomplexheatmap",
   "pygam",
   "scanpy",

@@ -3,13 +3,13 @@
 Usage
 -----
     python scripts/benchmark/plot_comparison.py \
-        --results_dir /scratch/chanj3/wangm10/compare_run \
-        --output_dir  /scratch/chanj3/wangm10/compare_run/figures
+        --results_dir /scratch/chanj3/wangm10/compare_run_tuning \
+        --output_dir  /scratch/chanj3/wangm10/compare_run_tuning/figures
 
     To regenerate after new runs or with a subset:
     python scripts/benchmark/plot_comparison.py \
-        --results_dir /scratch/chanj3/wangm10/compare_run \
-        --output_dir  /scratch/chanj3/wangm10/compare_run/figures \
+        --results_dir /scratch/chanj3/wangm10/compare_run_tuning \
+        --output_dir  /scratch/chanj3/wangm10/compare_run_tuning/figures \
         --scenarios warp_medium warp_hard_monotone combined_challenge \
         --fmt png --dpi 200
 

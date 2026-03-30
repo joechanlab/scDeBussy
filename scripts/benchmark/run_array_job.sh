@@ -16,6 +16,11 @@
 #   BASELINE_METHOD_PARAMS_B64    base64-encoded JSON used when METHOD=identity
 #   SCDEBUSSY_METHOD_PARAMS_B64   base64-encoded JSON used when METHOD=scdebussy
 #   CELLALIGN_METHOD_PARAMS_B64   base64-encoded JSON used for cellalign* methods
+# Optional tuning environment variables:
+#   TUNE_MODE                     one of off, auto, force (default: auto)
+#   TUNE_TRIALS                   Optuna trial budget (default: 30)
+#   TUNE_SEED                     Optuna random seed (default: 42)
+#   METHOD_TUNE_TRIALS_MAP        optional CSV mapping, e.g. method1=3,method2=1
 # (base64 encoding avoids SLURM --export comma-splitting of JSON values)
 #
 # Edit the SBATCH directives below to match your cluster configuration:
@@ -56,6 +61,28 @@ fi
 echo "[task ${TASK_ID}] method=${METHOD}  scenario=${SCENARIO}  seed=${SEED}"
 echo "[task ${TASK_ID}] output_dir=${OUTPUT_DIR}"
 
+TUNE_MODE="${TUNE_MODE:-auto}"
+TUNE_TRIALS="${TUNE_TRIALS:-30}"
+TUNE_SEED="${TUNE_SEED:-42}"
+METHOD_TUNE_TRIALS_MAP="${METHOD_TUNE_TRIALS_MAP:-}"
+
+# Optional per-method override for tuning trial budget.
+if [[ -n "${METHOD_TUNE_TRIALS_MAP}" ]]; then
+    IFS=',' read -r -a _mt_entries <<< "${METHOD_TUNE_TRIALS_MAP}"
+    for _entry in "${_mt_entries[@]}"; do
+        _entry_trimmed="${_entry//[[:space:]]/}"
+        [[ -z "${_entry_trimmed}" ]] && continue
+        _k="${_entry_trimmed%%=*}"
+        _v="${_entry_trimmed#*=}"
+        if [[ "${_k}" == "${METHOD}" ]] && [[ "${_v}" =~ ^[0-9]+$ ]] && [[ "${_v}" -gt 0 ]]; then
+            TUNE_TRIALS="${_v}"
+            break
+        fi
+    done
+fi
+
+echo "[task ${TASK_ID}] tune_mode=${TUNE_MODE}  tune_trials=${TUNE_TRIALS}  tune_seed=${TUNE_SEED}"
+
 # ---- Activate environment (edit if using conda or a specific venv) ---------
 # Example for conda:
 #   source activate scdebussy
@@ -91,6 +118,9 @@ CMD=(
     --scenario "${SCENARIO}"
     --seed "${SEED}"
     --output_dir "${OUTPUT_DIR}"
+    --tune "${TUNE_MODE}"
+    --tune_trials "${TUNE_TRIALS}"
+    --tune_seed "${TUNE_SEED}"
 )
 
 if [[ -n "${METHOD_PARAMS_JSON}" ]]; then

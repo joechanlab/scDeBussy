@@ -79,3 +79,52 @@ def plot_barycenter_boundaries(adata, barycenter_key="barycenter", ax=None, figs
         plt.tight_layout()
         return fig
     return ax
+
+
+def plot_em_convergence(adata, barycenter_key="barycenter", ax=None, figsize=(5, 4)):
+    """Plot EM objective/cost across iterations for scDeBussy alignment."""
+    if barycenter_key not in adata.uns:
+        raise ValueError(f"{barycenter_key!r} not found in adata.uns.")
+
+    bary_meta = adata.uns[barycenter_key]
+    if not isinstance(bary_meta, dict) or "em_convergence" not in bary_meta:
+        raise ValueError("EM convergence data not found. Run scDeBussy with updated convergence metadata enabled.")
+
+    conv = bary_meta["em_convergence"]
+    if not isinstance(conv, dict):
+        raise ValueError("Invalid em_convergence payload in adata.uns.")
+
+    costs = np.asarray(conv.get("iteration_costs", []), dtype=float)
+    if costs.size == 0:
+        raise ValueError("em_convergence.iteration_costs is empty.")
+
+    created_ax = ax is None
+    if created_ax:
+        fig, ax = plt.subplots(figsize=figsize)
+
+    iterations = np.arange(1, costs.size + 1)
+    ax.plot(iterations, costs, marker="o", color="#1f77b4", linewidth=1.8, markersize=4)
+    ax.set_xlabel("EM Iteration")
+    ax.set_ylabel("Total Alignment Cost")
+    ax.set_title("scDeBussy EM Convergence")
+    ax.grid(True, alpha=0.3)
+
+    final_iter = int(conv.get("final_iteration", costs.size))
+    converged = bool(conv.get("converged", False))
+    final_cost = float(costs[min(final_iter, costs.size) - 1])
+    marker_color = "#2ca02c" if converged else "#d62728"
+    ax.scatter([min(final_iter, costs.size)], [final_cost], color=marker_color, zorder=3)
+    ax.text(
+        min(final_iter, costs.size),
+        final_cost,
+        " converged" if converged else " max_iter",
+        va="bottom",
+        ha="left",
+        fontsize=9,
+        color=marker_color,
+    )
+
+    if created_ax:
+        plt.tight_layout()
+        return fig
+    return ax

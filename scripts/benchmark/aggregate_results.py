@@ -69,6 +69,15 @@ def _flatten_result(rec: dict) -> dict[str, Any]:
         if isinstance(v, (int, float, str, bool)) or v is None:
             out[f"unsupervised_method_{k}"] = v
 
+    tuning = rec.get("tuning", {})
+    if isinstance(tuning, dict):
+        out["tuning_enabled"] = bool(tuning.get("enabled", False))
+        out["tuning_mode"] = tuning.get("mode")
+        out["tuning_objective"] = tuning.get("objective")
+        out["tuning_n_trials"] = tuning.get("n_trials")
+        out["tuning_n_successful_trials"] = tuning.get("n_successful_trials")
+        out["tuning_best_score"] = tuning.get("best_score")
+
     # Convenience: delta pearson / delta rmse
     b_r = out.get("baseline_global_pearson_r")
     a_r = out.get("aligned_global_pearson_r")
