@@ -1084,8 +1084,17 @@ def run_cellalign_fixed_reference(adata, method_params: dict) -> dict:
             rec.update({"status": "error", "error": str(exc)})
         pair_records.append(rec)
 
+    failed_pairs = [r for r in pair_records if r.get("status") == "error"]
     if np.any(~np.isfinite(aligned_global)):
-        raise ValueError("cellalign_fixed_reference failed to assign aligned values to all cells.")
+        if failed_pairs:
+            details = "\n".join(f"  pair={r['pair']}: {r['error']}" for r in failed_pairs)
+            raise ValueError(
+                f"cellalign_fixed_reference failed to assign aligned values to all cells. "
+                f"{len(failed_pairs)} pair(s) errored:\n{details}"
+            )
+        raise ValueError(
+            "cellalign_fixed_reference failed to assign aligned values to all cells (no pair errors recorded)."
+        )
 
     adata.obs[key_added] = _safe_minmax_scale(aligned_global)
     summary = _pairwise_summary(pair_records)

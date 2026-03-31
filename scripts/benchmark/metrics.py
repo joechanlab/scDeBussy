@@ -10,6 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from scdebussy.tl import cross_batch_knn_purity, cross_batch_purity_sweep
 from scdebussy.tl import smooth_patient_trajectory as _smooth_patient_trajectory
 
 # ---------------------------------------------------------------------------
@@ -405,3 +406,68 @@ def compute_unsupervised_metrics(
         "patient_hist_disagreement": float(patient_hist_disagreement),
         "density_coverage_penalty": float(density_coverage_penalty),
     }
+
+
+def compute_real_data_label_metrics(
+    adata,
+    *,
+    key_added: str = "aligned_pseudotime",
+    patient_key: str = "patient",
+    label_key: str = "cell_type",
+    purity_n_neighbors: int = 50,
+    purity_sweep_k_values: tuple[int, ...] = (15, 30, 50, 75, 100),
+    compute_purity_sweep: bool = False,
+) -> dict:
+    """Compute label-informed, no-ground-truth metrics for real datasets.
+
+    This helper is intended for real-world cohorts where ``tau_global`` is not
+    available. It currently packages cross-batch cell-type purity metrics in a
+    benchmark-friendly scalar format.
+
+    Returns
+    -------
+    dict
+        Scalar metrics suitable for JSON/CSV aggregation.
+    """
+    required = [key_added, patient_key, label_key]
+    missing = [col for col in required if col not in adata.obs]
+    if missing:
+        raise ValueError(f"Missing required obs columns for real-data metrics: {missing}")
+
+    purity = cross_batch_knn_purity(
+        adata,
+        pseudotime_key=key_added,
+        label_key=label_key,
+        batch_key=patient_key,
+        n_neighbors=int(purity_n_neighbors),
+        inplace=False,
+    )
+
+    result = {
+        "global_cross_batch_purity": float(purity.get("global_cross_batch_purity", np.nan)),
+        "purity_n_neighbors": int(purity_n_neighbors),
+        "purity_n_excluded_singleton_types": int(len(purity.get("excluded_singleton_types", []))),
+        "purity_n_cell_types_evaluated": int(len(purity.get("per_class_purity", {}))),
+    }
+
+    if compute_purity_sweep:
+        cross_batch_purity_sweep(
+            adata,
+            k_values=tuple(int(v) for v in purity_sweep_k_values),
+            pseudotime_key=key_added,
+            label_key=label_key,
+            batch_key=patient_key,
+            key_added="__tmp_purity_sweep",
+        )
+        sweep = adata.uns.pop("__tmp_purity_sweep", {})
+        if sweep:
+            vals = np.asarray(list(sweep.values()), dtype=float)
+            result.update(
+                {
+                    "purity_sweep_min": float(np.nanmin(vals)),
+                    "purity_sweep_mean": float(np.nanmean(vals)),
+                    "purity_sweep_max": float(np.nanmax(vals)),
+                }
+            )
+
+    return result
