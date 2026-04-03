@@ -159,7 +159,7 @@ def cluster_and_order_genes(
     return ordered
 
 
-def bicluster_ordered_heatmap(
+def cosegment_ordered_heatmap(
     matrix,
     *,
     n_row_clusters: int = 3,
@@ -629,7 +629,7 @@ def _minmax(values: np.ndarray) -> np.ndarray:
 
 
 __all__ = [
-    "bicluster_ordered_heatmap",
+    "cosegment_ordered_heatmap",
     "compute_gene_trend_features",
     "cluster_and_order_genes",
     "compute_trend_recurrence_score",

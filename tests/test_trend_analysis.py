@@ -3,10 +3,10 @@ import numpy as np
 import pandas as pd
 
 from scdebussy.tl import (
-    bicluster_ordered_heatmap,
     cluster_and_order_genes,
     compute_composite_alignment_score,
     compute_gene_trend_features,
+    cosegment_ordered_heatmap,
     evaluate_basal_signature_prominence,
     scDeBussy,
     temporal_kernel_gene_set_rankings,
@@ -116,7 +116,7 @@ def test_compute_composite_alignment_score_has_finite_output(sample_adata):
     assert set(result["components"]) == {"global_purity", "class_stability", "recurrence"}
 
 
-def test_bicluster_ordered_heatmap_recovers_consecutive_blocks():
+def test_cosegment_ordered_heatmap_recovers_consecutive_blocks():
     matrix = np.array(
         [
             [5.0, 5.0, 0.0, 0.0],
@@ -127,7 +127,7 @@ def test_bicluster_ordered_heatmap_recovers_consecutive_blocks():
         dtype=float,
     )
 
-    result = bicluster_ordered_heatmap(
+    result = cosegment_ordered_heatmap(
         matrix, n_row_clusters=2, n_col_clusters=2, min_rows_per_cluster=1, min_cols_per_cluster=1
     )
 
