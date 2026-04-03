@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Submit one SLURM array where each task runs a different method on real data.
-#
+
 # Typical workflow:
 # 1) Prepare staged files:
 #    python scripts/benchmark/prepare_real_data_inputs.py ...
@@ -21,8 +21,8 @@
 #   s_local \
 #   cell_type_final2 \
 #   1 \
-#   auto \
-#   30 \
+#   off \
+#   1 \
 #   42 \
 #   50 \
 #   1 \

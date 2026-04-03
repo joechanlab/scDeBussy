@@ -1,5 +1,8 @@
+import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+from scipy.ndimage import uniform_filter1d
 
 
 def plot_barycenter_boundaries(adata, barycenter_key="barycenter", ax=None, figsize=(10, 4)):
@@ -42,16 +45,11 @@ def plot_barycenter_boundaries(adata, barycenter_key="barycenter", ax=None, figs
         ax.axvline(x=bary_time[peak], color="#D95319", linestyle="--", linewidth=2, label=label)
 
     # 3. Shade the segments with alternating background colors
-    # This visually confirms the "chapters" the algorithm will use for subsequence matching
     for i, seg in enumerate(segments):
         start_t = seg["start_time"]
         end_t = seg["end_time"]
-
-        # Alternate between a very faint gray and pure white
         bg_color = "#F0F0F0" if i % 2 == 0 else "#FFFFFF"
         ax.axvspan(start_t, end_t, facecolor=bg_color, alpha=0.5, zorder=0)
-
-        # Add segment number labels near the top of the plot
         mid_point = start_t + (end_t - start_t) / 2
         ax.text(
             mid_point,
@@ -68,11 +66,8 @@ def plot_barycenter_boundaries(adata, barycenter_key="barycenter", ax=None, figs
     ax.set_xlabel("Global Barycenter Pseudotime", fontsize=12, fontweight="bold")
     ax.set_ylabel("Rate of Change (Velocity)", fontsize=12, fontweight="bold")
     ax.set_title("Automatic Boundary Detection via Transcriptomic Velocity", fontsize=14)
-
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-
-    # Move legend outside the plot so it doesn't cover the data
     ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False)
 
     if ax is None:
@@ -128,3 +123,180 @@ def plot_em_convergence(adata, barycenter_key="barycenter", ax=None, figsize=(5,
         plt.tight_layout()
         return fig
     return ax
+
+
+def plot_running_enrichment_ridge(
+    enrichment_df: pd.DataFrame,
+    gene_sets_to_plot: list,
+    ordered_genes,
+    *,
+    gene_curve=None,
+    cutoff_points=(1, 2),
+    figsize=(8, 10),
+    smooth_window: int = 10,
+    overlap: float = 0.5,
+    short_names=None,
+    save_path=None,
+):
+    """Plot stacked ridge plots of running gene-set enrichment along ordered genes.
+
+    Each ridge corresponds to one gene set; the fill colour is drawn from the
+    ``viridis`` palette.  An optional top annotation bar marks early / mid / late
+    gene phases when ``gene_curve`` is supplied.
+
+    Parameters
+    ----------
+    enrichment_df : pd.DataFrame
+        Output of :func:`scdebussy.tl.compute_running_enrichment` with columns
+        ``gene_set``, ``position``, ``score``.
+    gene_sets_to_plot : list of str
+        Ordered list of gene-set names to show (top to bottom).
+    ordered_genes : list or array-like of str
+        Gene list in temporal order used when computing ``enrichment_df``.
+    gene_curve : pd.DataFrame, optional
+        Barycenter expression DataFrame whose first column is pseudotime and
+        remaining columns are genes.  When supplied a phase-annotation bar is
+        drawn above the ridges; when ``None`` the bar is omitted.
+    cutoff_points : tuple of two floats, optional
+        Pseudotime cutoffs separating early / mid / late phases.
+        Only used when ``gene_curve`` is provided.  Defaults to ``(1, 2)``.
+    figsize : tuple of two floats, optional
+        Figure size ``(width, height)``.  Defaults to ``(8, 10)``.
+    smooth_window : int, optional
+        Width (in genes) for uniform smoothing of each enrichment curve.
+        Defaults to 10.
+    overlap : float, optional
+        Fractional overlap between adjacent ridge axes.  Defaults to ``0.5``.
+    short_names : list of str, optional
+        Short display names for each gene set (same order as
+        ``gene_sets_to_plot``).  Defaults to cleaned versions of the set names.
+    save_path : str or None, optional
+        File path to save the figure.  Defaults to ``None`` (no save).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The rendered figure.
+    """
+    ordered_genes = list(ordered_genes)
+    n_sets = len(gene_sets_to_plot)
+    n_genes = len(ordered_genes)
+
+    has_bar = gene_curve is not None
+    n_rows = n_sets + (1 if has_bar else 0)
+    height_ratios = ([0.4] if has_bar else []) + [1] * n_sets
+
+    fig = plt.figure(figsize=figsize)
+    gs_layout = gridspec.GridSpec(n_rows, 1, height_ratios=height_ratios, figure=fig)
+    gs_layout.update(hspace=0)
+    axes = [fig.add_subplot(gs_layout[i]) for i in range(n_rows)]
+
+    bar_ax = axes[0] if has_bar else None
+    ridge_axes = axes[1:] if has_bar else axes
+
+    # ── phase annotation bar ─────────────────────────────────────────────────
+    if has_bar:
+        from matplotlib.colors import ListedColormap
+
+        pseudotime = gene_curve.iloc[:, 0].values
+        gene_phases = np.zeros(n_genes, dtype=int)
+        for i, gene in enumerate(ordered_genes):
+            if gene in gene_curve.columns:
+                peak_idx = int(np.argmax(gene_curve[gene].values))
+                peak_pt = float(pseudotime[peak_idx])
+                if peak_pt < cutoff_points[0]:
+                    gene_phases[i] = 0
+                elif peak_pt < cutoff_points[1]:
+                    gene_phases[i] = 1
+                else:
+                    gene_phases[i] = 2
+
+        purples_cmap = plt.get_cmap("Purples")
+        colors_list = [tuple(c) for c in purples_cmap(np.linspace(0.45, 0.9, 3))]
+        phase_cmap = ListedColormap(colors_list)
+        bar_ax.pcolormesh(
+            np.arange(n_genes + 1),
+            [0, 1],
+            gene_phases.reshape(1, -1),
+            cmap=phase_cmap,
+            shading="auto",
+        )
+        bar_ax.set_yticks([])
+        bar_ax.set_xlim(0, n_genes)
+        bar_ax.set_xticks([])
+        for s in bar_ax.spines.values():
+            s.set_visible(False)
+        for idx, phase_label in enumerate(["Early", "Mid", "Late"]):
+            mask = np.where(gene_phases == idx)[0]
+            if len(mask) > 0:
+                bar_ax.text(
+                    float(mask.mean()),
+                    1.3,
+                    phase_label,
+                    ha="center",
+                    va="center",
+                    fontsize=9,
+                    fontweight="bold",
+                    color=colors_list[idx],
+                    clip_on=False,
+                )
+
+    # ── ridge plots ──────────────────────────────────────────────────────────
+    fill_colors = plt.cm.viridis(np.linspace(0, 0.8, n_sets))
+
+    for i, (ax_r, gs_name) in enumerate(zip(ridge_axes, gene_sets_to_plot, strict=False)):
+        subset = enrichment_df[enrichment_df["gene_set"] == gs_name].sort_values("position")
+        if subset.empty:
+            ax_r.axis("off")
+            continue
+
+        if i > 0:
+            pos = ax_r.get_position()
+            ax_r.set_position([pos.x0, pos.y0 + overlap * i * 0.05, pos.width, pos.height])
+
+        x = subset["position"].values
+        y_raw = subset["score"].values
+        y = uniform_filter1d(y_raw, size=smooth_window)
+
+        ax_r.plot(x, y, color="white", linewidth=1.5, alpha=0.9, zorder=i * 2)
+        ax_r.fill_between(x, 0, y, color=fill_colors[i], alpha=0.8, zorder=i * 2)
+        ax_r.set_ylim(0, None)
+        ax_r.set_xlim(0, n_genes)
+        ax_r.patch.set_alpha(0)
+        ax_r.set_yticks([])
+        for side in ["top", "right", "left", "bottom"]:
+            ax_r.spines[side].set_visible(False)
+        ax_r.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+
+        if short_names is not None:
+            display_label = short_names[i]
+        else:
+            display_label = (
+                gs_name.replace(" Human", "")
+                .replace(" Mouse", "")
+                .split(" (")[0]
+                .replace("_", " ")
+                .replace("all ", "")
+                .replace("-", " ")
+            )
+        ax_r.text(
+            -0.02,
+            0.1,
+            display_label,
+            transform=ax_r.transAxes,
+            fontsize=10,
+            fontweight="bold",
+            ha="right",
+            va="bottom",
+        )
+
+    # ── bottom x-axis ────────────────────────────────────────────────────────
+    bottom_ax = ridge_axes[-1]
+    bottom_ax.spines["bottom"].set_visible(True)
+    bottom_ax.set_xlabel("Gene Position", fontsize=12, fontweight="bold")
+    bottom_ax.tick_params(axis="x", which="both", bottom=True, labelbottom=True)
+
+    if save_path:
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+
+    return fig

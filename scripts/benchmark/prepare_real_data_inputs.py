@@ -15,7 +15,7 @@ The staged manifest is then used by the SLURM array scripts:
 python scripts/benchmark/prepare_real_data_inputs.py \
   --path-list /home/wangm10/HTA.lung.NE_plasticity_scDeBussy/figures/figure4/Basal/figure_4_adata_path.xlsx \
   --label-csv /data1/chanj3/HTA.lung.NE_plasticity.120122/Numbat_All/cell_type_labels.csv \
-  --samples RU1083,RU263,RU1444,RU151,RU1303,RU581,RU831,RU1646 \
+  --samples RU1083,RU263,RU1444,RU151,RU1303,RU581,RU831,RU1646,RU942 \
   --staging-dir /scratch/chanj3/wangm10/HTAN/preprocessed/ \
   --staged-manifest /scratch/chanj3/wangm10/HTAN/preprocessed/staged_paths.txt \
   --patient-key patient \
