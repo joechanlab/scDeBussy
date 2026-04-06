@@ -25,6 +25,7 @@ classifiers = [
 ]
 dependencies = [
   "anndata",
+  "dtw-python",
   "gseapy",
   "optuna",
   "pycomplexheatmap",
@@ -32,6 +33,7 @@ dependencies = [
   "scanpy",
   # for debug logging (referenced from the issue template)
   "session-info2",
+  "torch",
   "tslearn",
 ]
 optional-dependencies.dev = [
