@@ -288,7 +288,7 @@ def _draw_grouped_metric_boxplots_on_axis(ax, df, methods, scenarios, col):
 def _combined_pearson_rmse_boxplot(df, methods, scenarios, fmt, dpi, out_prefix):
     """Create a stacked publication panel: Pearson (top) and RMSE (bottom)."""
     n_sc = len(scenarios)
-    fig, axes = plt.subplots(2, 1, figsize=(max(10, n_sc * 1.1), 7.2), sharex=True)
+    fig, axes = plt.subplots(2, 1, figsize=(max(10, n_sc * 1.1), 5.5), sharex=True)
 
     # Top panel: Pearson
     _draw_grouped_metric_boxplots_on_axis(axes[0], df, methods, scenarios, col="aligned_global_pearson_r")
@@ -308,9 +308,9 @@ def _combined_pearson_rmse_boxplot(df, methods, scenarios, fmt, dpi, out_prefix)
         handles=legend_handles,
         loc="lower left",
         ncol=1,
-        bbox_to_anchor=(0.01, 0.02),
+        bbox_to_anchor=(0.0, 0.0),
         framealpha=0.9,
-        fontsize=13,
+        fontsize=12,
     )
 
     fig.tight_layout()
@@ -380,7 +380,7 @@ def _win_rate_bar(df, methods, col, higher_is_better, fmt, dpi, out_prefix):
     rates = {m: wins[m] / matches[m] if matches[m] > 0 else 0.0 for m in methods}
     sorted_methods = sorted(methods, key=lambda m: -rates[m])
 
-    fig, ax = plt.subplots(figsize=(5, 3.2))
+    fig, ax = plt.subplots(figsize=(3.5, 4))
     xs = range(len(sorted_methods))
     bars = ax.bar(
         xs,
@@ -403,11 +403,11 @@ def _win_rate_bar(df, methods, col, higher_is_better, fmt, dpi, out_prefix):
         )
     ax.axhline(0.5, color="0.4", linewidth=0.8, linestyle="--")
     ax.set_xticks(xs)
-    ax.set_xticklabels([_label(m) for m in sorted_methods], rotation=12, ha="right")
+    ax.set_xticklabels([_label(m) for m in sorted_methods], rotation=45, ha="right")
     ax.set_ylabel("Head-to-head win rate")
     ax.set_ylim(0, min(1.0, max(rates.values()) + 0.12))
     ax.yaxis.set_major_formatter(mticker.PercentFormatter(1.0))
-    ax.set_title("Global head-to-head win rate (Pearson r)", fontweight="bold", pad=8)
+    ax.set_title("Head-to-head win rate (Pearson r)", fontweight="bold", pad=8)
     ax.grid(axis="y", linewidth=0.4, color="0.88", zorder=0)
 
     _savefig(fig, out_prefix, fmt, dpi)

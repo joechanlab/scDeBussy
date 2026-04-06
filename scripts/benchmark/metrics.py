@@ -197,6 +197,7 @@ def compute_generic_unsupervised_metrics(
     bins = np.linspace(0.0, 1.0, n_hist_bins + 1)
     histograms = []
     roughness = []
+    clipped_by_patient = []
     for pid in sorted(pd.unique(patients)):
         vals = aligned[patients == pid]
         vals = vals[np.isfinite(vals)]
@@ -204,6 +205,7 @@ def compute_generic_unsupervised_metrics(
             continue
 
         clipped = np.clip(vals, 0.0, 1.0)
+        clipped_by_patient.append(clipped)
         h, _ = np.histogram(clipped, bins=bins, density=False)
         h = h.astype(float)
         h /= h.sum() + 1e-12
@@ -223,6 +225,23 @@ def compute_generic_unsupervised_metrics(
     else:
         patient_hist_disagreement = 0.0
 
+    # Mean pairwise 1D Wasserstein distance (Earth Mover's Distance) on aligned pseudotime.
+    # This is a bin-free distribution distance that respects pseudotime ordering.
+    if len(clipped_by_patient) > 1:
+        try:
+            from scipy.stats import wasserstein_distance
+
+            pairwise_w1 = [
+                float(wasserstein_distance(clipped_by_patient[a], clipped_by_patient[b]))
+                for a in range(len(clipped_by_patient))
+                for b in range(a + 1, len(clipped_by_patient))
+            ]
+            patient_wasserstein_disagreement = float(np.mean(pairwise_w1))
+        except Exception:  # noqa: BLE001
+            patient_wasserstein_disagreement = float("nan")
+    else:
+        patient_wasserstein_disagreement = 0.0
+
     mean_roughness = float(np.mean(roughness)) if roughness else 0.0
 
     unsupervised_score_generic = 0.70 * patient_hist_disagreement + 0.20 * range_violation + 0.10 * mean_roughness
@@ -231,6 +250,7 @@ def compute_generic_unsupervised_metrics(
         "unsupervised_score_generic": float(unsupervised_score_generic),
         "range_violation": float(range_violation),
         "patient_hist_disagreement": float(patient_hist_disagreement),
+        "patient_wasserstein_disagreement": float(patient_wasserstein_disagreement),
         "mean_sorted_step": float(mean_roughness),
     }
 
