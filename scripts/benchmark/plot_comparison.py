@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import textwrap
 
 import matplotlib
 
@@ -250,10 +251,10 @@ def _boxplot_metric(df, methods, scenarios, col, ylabel, title, higher_is_better
     _savefig(fig, out_prefix, fmt, dpi)
 
 
-def _draw_grouped_metric_boxplots_on_axis(ax, df, methods, scenarios, col):
+def _draw_grouped_metric_boxplots_on_axis(ax, df, methods, scenarios, col, add_group_guides=False):
     """Draw method-colored grouped boxplots for one metric onto a provided axis."""
     n_m = len(methods)
-    width = 0.7 / n_m
+    width = 0.8 / n_m
     offsets = np.linspace(-(n_m - 1) / 2, (n_m - 1) / 2, n_m) * width
 
     for i, sc in enumerate(scenarios):
@@ -265,15 +266,15 @@ def _draw_grouped_metric_boxplots_on_axis(ax, df, methods, scenarios, col):
             bp = ax.boxplot(
                 vals,
                 positions=[i + offsets[j]],
-                widths=width * 0.88,
+                widths=width * 0.8,
                 patch_artist=True,
                 notch=False,
                 showfliers=True,
                 flierprops={"marker": ".", "markersize": 3, "alpha": 0.5, "color": _color(m)},
-                medianprops={"color": "white", "linewidth": 1},
-                whiskerprops={"linewidth": 0.9, "color": _color(m)},
-                capprops={"linewidth": 0.9, "color": _color(m)},
-                boxprops={"linewidth": 0.0},
+                medianprops={"color": "white", "linewidth": 1.4},
+                whiskerprops={"linewidth": 1.4, "color": _color(m)},
+                capprops={"linewidth": 1.4, "color": _color(m)},
+                boxprops={"linewidth": 0.6, "edgecolor": _color(m)},
             )
             for patch in bp["boxes"]:
                 patch.set_facecolor(_color(m))
@@ -282,6 +283,11 @@ def _draw_grouped_metric_boxplots_on_axis(ax, df, methods, scenarios, col):
     if col.startswith("delta_"):
         ax.axhline(0, color="0.5", linewidth=0.8, linestyle="--", zorder=0)
 
+    if add_group_guides:
+        # Add light vertical separators so each scenario group is easy to track across panels.
+        for x in range(1, len(scenarios)):
+            ax.axvline(x - 0.5, color="0.90", linewidth=0.8, zorder=0)
+
     # Publication panel style: no background grid guides.
 
 
@@ -289,28 +295,63 @@ def _combined_pearson_rmse_boxplot(df, methods, scenarios, fmt, dpi, out_prefix)
     """Create a stacked publication panel: Pearson (top) and RMSE (bottom)."""
     n_sc = len(scenarios)
     fig, axes = plt.subplots(2, 1, figsize=(max(10, n_sc * 1.1), 5.5), sharex=True)
+    raw_labels = [_slabel(s).replace("\n", " ") for s in scenarios]
+
+    def _wrap_full_label(lbl: str) -> str:
+        words = lbl.split()
+        if len(words) <= 2 and len(lbl) <= 12:
+            return lbl
+
+        wrapped = textwrap.wrap(lbl, width=12, break_long_words=False, break_on_hyphens=False)
+        if len(wrapped) <= 3:
+            return "\n".join(wrapped)
+
+        # Keep full text while capping visual height to ~3 lines.
+        return "\n".join([wrapped[0], wrapped[1], " ".join(wrapped[2:])])
+
+    xlabels = [_wrap_full_label(lbl) for lbl in raw_labels]
+    dense_layout = n_sc > 10 or max((len(lbl) for lbl in raw_labels), default=0) > 18
 
     # Top panel: Pearson
-    _draw_grouped_metric_boxplots_on_axis(axes[0], df, methods, scenarios, col="aligned_global_pearson_r")
+    _draw_grouped_metric_boxplots_on_axis(
+        axes[0],
+        df,
+        methods,
+        scenarios,
+        col="aligned_global_pearson_r",
+        add_group_guides=True,
+    )
     axes[0].set_ylabel("Pearson r", fontsize=20)
     axes[0].tick_params(axis="y", labelsize=12)
     axes[0].tick_params(axis="x", labelbottom=False)
 
     # Bottom panel: RMSE
-    _draw_grouped_metric_boxplots_on_axis(axes[1], df, methods, scenarios, col="aligned_global_rmse")
+    _draw_grouped_metric_boxplots_on_axis(
+        axes[1],
+        df,
+        methods,
+        scenarios,
+        col="aligned_global_rmse",
+        add_group_guides=True,
+    )
     axes[1].set_ylabel("RMSE", fontsize=20)
     axes[1].tick_params(axis="y", labelsize=12)
     axes[1].set_xticks(range(n_sc))
-    axes[1].set_xticklabels([_slabel(s) for s in scenarios], rotation=0, fontsize=12)
+    axes[1].set_xticklabels(
+        xlabels,
+        rotation=30 if dense_layout else 0,
+        ha="right" if dense_layout else "center",
+        fontsize=15,
+    )
 
     legend_handles = [plt.Rectangle((0, 0), 1, 1, color=_color(m), alpha=0.82, label=_label(m)) for m in methods]
     axes[0].legend(
         handles=legend_handles,
         loc="lower left",
         ncol=1,
-        bbox_to_anchor=(0.0, 0.0),
+        bbox_to_anchor=(0.0, 0),
         framealpha=0.9,
-        fontsize=12,
+        fontsize=11,
     )
 
     fig.tight_layout()
@@ -380,35 +421,36 @@ def _win_rate_bar(df, methods, col, higher_is_better, fmt, dpi, out_prefix):
     rates = {m: wins[m] / matches[m] if matches[m] > 0 else 0.0 for m in methods}
     sorted_methods = sorted(methods, key=lambda m: -rates[m])
 
-    fig, ax = plt.subplots(figsize=(3.5, 4))
+    fig, ax = plt.subplots(figsize=(2.5, 5))
     xs = range(len(sorted_methods))
-    bars = ax.bar(
+    bars = ax.barh(
         xs,
         [rates[m] for m in sorted_methods],
         color=[_color(m) for m in sorted_methods],
         alpha=0.85,
-        width=0.55,
+        height=0.55,
         edgecolor="white",
         linewidth=0.5,
     )
     for bar, m in zip(bars, sorted_methods, strict=True):
         ax.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height() + 0.01,
+            bar.get_width() + 0.015,
+            bar.get_y() + bar.get_height() / 2,
             f"{rates[m]:.1%}",
-            ha="center",
-            va="bottom",
+            ha="left",
+            va="center",
             fontsize=9,
             fontweight="bold",
         )
-    ax.axhline(0.5, color="0.4", linewidth=0.8, linestyle="--")
-    ax.set_xticks(xs)
-    ax.set_xticklabels([_label(m) for m in sorted_methods], rotation=45, ha="right")
-    ax.set_ylabel("Head-to-head win rate")
-    ax.set_ylim(0, min(1.0, max(rates.values()) + 0.12))
-    ax.yaxis.set_major_formatter(mticker.PercentFormatter(1.0))
-    ax.set_title("Head-to-head win rate (Pearson r)", fontweight="bold", pad=8)
-    ax.grid(axis="y", linewidth=0.4, color="0.88", zorder=0)
+    ax.axvline(0.5, color="0.4", linewidth=0.8, linestyle="--")
+    ax.set_yticks(xs)
+    ax.set_yticklabels([_label(m) for m in sorted_methods], fontsize=15)
+    ax.invert_yaxis()
+    ax.set_xlabel("Head-to-head win rate")
+    ax.set_xlim(0, min(1.0, max(rates.values()) + 0.12))
+    ax.xaxis.set_major_formatter(mticker.PercentFormatter(1.0))
+    ax.set_title("Win rate (Pearson r)", fontweight="bold", pad=8, fontsize=15)
+    ax.grid(axis="x", linewidth=0.4, color="0.88", zorder=0)
 
     _savefig(fig, out_prefix, fmt, dpi)
 
