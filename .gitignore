@@ -21,3 +21,5 @@ __pycache__/
 /docs/_build/
 
 _legacy/
+.pybiomart.sqlite
+scDeBussy.txt
