@@ -619,6 +619,324 @@ def compute_running_enrichment(
     return pd.DataFrame(rows)
 
 
+def test_differential_trajectory(
+    adata,
+    condition_key: str,
+    *,
+    patient_key: str = "patient",
+    aligned_pseudotime_key: str = "aligned_pseudotime",
+    genes: list[str] | None = None,
+    n_spline_knots: int = 6,
+    n_permutations: int = 1000,
+    seed: int = 0,
+    fdr_threshold: float = 0.05,
+    barycenter_key: str = "barycenter",
+    key_added: str = "differential_trajectory",
+) -> pd.DataFrame:
+    """Test for differential gene expression trajectories between conditions.
+
+    Compares per-patient smoothed expression trajectories along aligned pseudotime
+    between groups defined by a sample-level condition variable. Uses a functional
+    linear model with B-spline basis functions and sample-label permutation testing
+    to avoid cell-level pseudoreplication.
+
+    Three nested models are fit for each gene using per-patient trajectory
+    interpolations on the common aligned-pseudotime grid:
+
+    - **Intercept-only**: constant expression across time
+    - **Temporal**: shared B-spline curve (tests temporal variability, TDE)
+    - **Mean-shift**: temporal + scalar condition offset (tests uniform shift)
+    - **Full**: temporal + condition × B-spline interaction (tests shape change)
+
+    Permutations shuffle condition labels at the **patient level** to control FDR
+    correctly in the presence of sample-level correlation.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data matrix. Must have been processed with :func:`scDeBussy` so
+        that ``adata.obs[aligned_pseudotime_key]`` and ``adata.uns[barycenter_key]``
+        are populated.
+    condition_key : str
+        Column in ``adata.obs`` containing a **sample-level** condition variable that
+        is constant within each patient. Supports binary categorical (2 groups) or
+        continuous numeric covariates.
+    patient_key : str, optional
+        Column in ``adata.obs`` identifying patients/samples. Default ``"patient"``.
+    aligned_pseudotime_key : str, optional
+        Column in ``adata.obs`` containing aligned pseudotime in ``[0, 1]``.
+        Default ``"aligned_pseudotime"``.
+    genes : list of str or None, optional
+        Subset of genes to test. Tests all genes when ``None``.
+    n_spline_knots : int, optional
+        Number of interior B-spline knots. Default 6.
+    n_permutations : int, optional
+        Number of patient-label permutations for empirical p-values. Default 1000.
+    seed : int, optional
+        Random seed for permutations. Default 0.
+    fdr_threshold : float, optional
+        FDR threshold used to assign ``xde_type``. Default 0.05.
+    barycenter_key : str, optional
+        Key in ``adata.uns`` where barycenter results are stored. Default ``"barycenter"``.
+    key_added : str, optional
+        Key under which results are stored in ``adata.uns``. Default
+        ``"differential_trajectory"``.
+
+    Returns
+    -------
+    pd.DataFrame
+        Gene-indexed DataFrame with columns:
+
+        - ``tde_stat``, ``tde_pval``, ``tde_fdr``: Temporal DE (parametric F-test).
+        - ``xde_stat``, ``xde_pval``, ``xde_fdr``: Overall condition effect (permutation).
+        - ``mean_shift_stat``, ``mean_shift_pval``, ``mean_shift_fdr``:
+          Condition shifts mean expression level.
+        - ``trend_diff_stat``, ``trend_diff_pval``, ``trend_diff_fdr``:
+          Condition changes temporal shape.
+        - ``xde_type``: ``"mean_shift"``, ``"trend_diff"``, ``"both"``, or ``"none"``.
+
+    Notes
+    -----
+    Results are also stored at ``adata.uns[key_added]`` as a dict with keys
+    ``"results"`` (the DataFrame) and ``"params"``.
+
+    Requires at least 4 patients per condition group for reliable inference. With
+    fewer than 10 total patients, increase ``n_permutations`` to at least 5000.
+
+    Examples
+    --------
+    >>> import scdebussy.tl as tl
+    >>> tl.scDeBussy(adata, patient_key="patient", pseudotime_key="dpt_pseudotime")
+    >>> results = tl.test_differential_trajectory(adata, condition_key="disease_status")
+    >>> results[results["xde_fdr"] < 0.05]
+    """
+    import warnings
+
+    from scipy.interpolate import BSpline
+    from scipy.stats import f as f_dist
+    from statsmodels.stats.multitest import multipletests
+
+    # ---- Validate inputs ----
+    if barycenter_key not in adata.uns:
+        raise ValueError(f"Missing adata.uns[{barycenter_key!r}]. Run scDeBussy() first.")
+    if aligned_pseudotime_key not in adata.obs:
+        raise ValueError(f"Missing adata.obs[{aligned_pseudotime_key!r}]. Run scDeBussy() first.")
+    if patient_key not in adata.obs:
+        raise ValueError(f"Missing adata.obs[{patient_key!r}].")
+    if condition_key not in adata.obs:
+        raise ValueError(f"Missing adata.obs[{condition_key!r}].")
+
+    barycenter = adata.uns[barycenter_key]
+    patient_ids: list[str] = list(barycenter.get("patient_ids", adata.obs[patient_key].astype(str).unique().tolist()))
+    n_bins: int = int(np.asarray(barycenter["expression"]).shape[0])
+
+    # ---- Gene subset ----
+    if genes is not None:
+        missing = [g for g in genes if g not in adata.var_names]
+        if missing:
+            raise ValueError(f"{len(missing)} requested genes not found in adata.var_names: {missing[:5]}")
+        adata_sub = adata[:, adata.var_names.isin(genes)]
+    else:
+        adata_sub = adata
+    gene_names = adata_sub.var_names.to_numpy(dtype=str)
+    n_genes = len(gene_names)
+
+    # ---- Condition encoding ----
+    cond_per_patient = []
+    for pid in patient_ids:
+        mask = adata.obs[patient_key].astype(str) == pid
+        vals = adata.obs.loc[mask, condition_key].unique()
+        if len(vals) != 1:
+            raise ValueError(
+                f"Patient {pid!r} has {len(vals)} distinct values for {condition_key!r}. "
+                "The condition variable must be constant within each patient."
+            )
+        cond_per_patient.append(vals[0])
+
+    cond_array = np.array(cond_per_patient)
+    try:
+        x = cond_array.astype(float)
+        x = x - x.mean()  # center continuous covariate
+    except (ValueError, TypeError) as err:
+        unique_conds = np.unique(cond_array)
+        if len(unique_conds) != 2:
+            raise ValueError(
+                f"Categorical condition_key must have exactly 2 groups; "
+                f"found {len(unique_conds)}: {unique_conds.tolist()}."
+            ) from err
+        x = (cond_array == unique_conds[1]).astype(float)
+
+    n_patients = len(patient_ids)
+    if n_patients < 4:
+        warnings.warn(
+            f"Only {n_patients} patients found. Permutation-based inference requires at least 4 samples.",
+            stacklevel=2,
+        )
+    unique_conds_all = np.unique(cond_array)
+    for uc in unique_conds_all:
+        if int(np.sum(cond_array == uc)) < 2:
+            warnings.warn(
+                f"Condition group {uc!r} has fewer than 2 samples. Results may be unreliable.",
+                stacklevel=2,
+            )
+
+    # ---- Per-patient trajectories on the aligned pseudotime grid ----
+    # Each patient: interpolate n_genes expression profiles onto n_bins uniform grid.
+    # Shape result: [n_patients × n_bins × n_genes]
+    grid = np.linspace(0.0, 1.0, n_bins)
+    patient_trajs: list[np.ndarray] = []
+    for pid in patient_ids:
+        mask = adata.obs[patient_key].astype(str) == pid
+        pt = adata.obs.loc[mask, aligned_pseudotime_key].to_numpy(dtype=float)
+        X_pat = adata_sub[mask].X
+        if sp.issparse(X_pat):
+            X_pat = X_pat.toarray()
+        X_pat = np.asarray(X_pat, dtype=float)
+        valid = np.isfinite(pt)
+        if valid.sum() < 2:
+            raise ValueError(f"Patient {pid!r} has fewer than 2 cells with finite aligned pseudotime.")
+        pt, X_pat = pt[valid], X_pat[valid]
+        sort_idx = np.argsort(pt)
+        pt, X_pat = pt[sort_idx], X_pat[sort_idx]
+        traj = np.column_stack([np.interp(grid, pt, X_pat[:, j]) for j in range(n_genes)])
+        patient_trajs.append(traj)  # [n_bins × n_genes]
+
+    # Vectorised response: [n_patients*n_bins × n_genes]
+    Y = np.stack(patient_trajs, axis=0).reshape(n_patients * n_bins, n_genes)
+
+    # ---- B-spline basis [n_bins × n_basis] ----
+    degree = 3
+    interior_knots = np.linspace(0.0, 1.0, n_spline_knots + 2)[1:-1]
+    t_knots = np.concatenate([[0.0] * (degree + 1), interior_knots, [1.0] * (degree + 1)])
+    n_basis = len(t_knots) - degree - 1
+    tau_grid = np.linspace(0.0, 1.0, n_bins)
+    B = np.zeros((n_bins, n_basis), dtype=float)
+    for j in range(n_basis):
+        c = np.zeros(n_basis)
+        c[j] = 1.0
+        B[:, j] = BSpline(t_knots, c, degree)(tau_grid)
+
+    D_intercept = np.ones((n_patients * n_bins, 1), dtype=float)
+    D_temporal = np.tile(B, (n_patients, 1))  # [n_patients*n_bins × n_basis]
+
+    def _rss(D: np.ndarray) -> np.ndarray:
+        """OLS residual sum of squares for all genes simultaneously → [n_genes]."""
+        beta, _, _, _ = np.linalg.lstsq(D, Y, rcond=None)
+        resid = Y - D @ beta
+        return (resid**2).sum(axis=0)
+
+    def _design_from_x(x_vec: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        x_rep = np.repeat(x_vec, n_bins)
+        D_mean = np.column_stack([D_temporal, x_rep])
+        D_full = np.column_stack([D_temporal, x_rep[:, None] * D_temporal])
+        return D_mean, D_full
+
+    def _f_stat(rss_null: np.ndarray, rss_alt: np.ndarray, df_null: int, df_alt: int) -> np.ndarray:
+        df_num = df_alt - df_null
+        df_den = n_patients * n_bins - df_alt
+        with np.errstate(divide="ignore", invalid="ignore"):
+            f = np.where(
+                (rss_alt > 0) & (df_num > 0) & (df_den > 0),
+                ((rss_null - rss_alt) / df_num) / (rss_alt / df_den),
+                0.0,
+            )
+        return np.maximum(f, 0.0)
+
+    # ---- Observed statistics ----
+    rss_int = _rss(D_intercept)
+    rss_temp = _rss(D_temporal)
+    D_mean_obs, D_full_obs = _design_from_x(x)
+    rss_mean_obs = _rss(D_mean_obs)
+    rss_full_obs = _rss(D_full_obs)
+
+    df_int, df_temp, df_mean_m, df_full_m = 1, n_basis, n_basis + 1, 2 * n_basis
+
+    f_tde = _f_stat(rss_int, rss_temp, df_int, df_temp)
+    f_xde = _f_stat(rss_temp, rss_full_obs, df_temp, df_full_m)
+    f_mean = _f_stat(rss_temp, rss_mean_obs, df_temp, df_mean_m)
+    f_trend = _f_stat(rss_mean_obs, rss_full_obs, df_mean_m, df_full_m)
+
+    # TDE uses the parametric F-distribution (no condition to permute)
+    pval_tde = f_dist.sf(f_tde, df_temp - df_int, n_patients * n_bins - df_temp)
+
+    # ---- Permutation test: shuffle patient-level condition labels ----
+    rng = np.random.default_rng(seed)
+    null_xde = np.empty((n_permutations, n_genes), dtype=float)
+    null_mean = np.empty((n_permutations, n_genes), dtype=float)
+    null_trend = np.empty((n_permutations, n_genes), dtype=float)
+
+    for i in range(n_permutations):
+        x_perm = x[rng.permutation(n_patients)]
+        D_mean_p, D_full_p = _design_from_x(x_perm)
+        rss_mean_p = _rss(D_mean_p)
+        rss_full_p = _rss(D_full_p)
+        null_xde[i] = _f_stat(rss_temp, rss_full_p, df_temp, df_full_m)
+        null_mean[i] = _f_stat(rss_temp, rss_mean_p, df_temp, df_mean_m)
+        null_trend[i] = _f_stat(rss_mean_p, rss_full_p, df_mean_m, df_full_m)
+
+    pval_xde = (1.0 + np.sum(null_xde >= f_xde, axis=0)) / (1.0 + n_permutations)
+    pval_mean = (1.0 + np.sum(null_mean >= f_mean, axis=0)) / (1.0 + n_permutations)
+    pval_trend = (1.0 + np.sum(null_trend >= f_trend, axis=0)) / (1.0 + n_permutations)
+
+    # ---- FDR correction (Benjamini-Hochberg) ----
+    _, fdr_tde, _, _ = multipletests(pval_tde, method="fdr_bh")
+    _, fdr_xde, _, _ = multipletests(pval_xde, method="fdr_bh")
+    _, fdr_mean, _, _ = multipletests(pval_mean, method="fdr_bh")
+    _, fdr_trend, _, _ = multipletests(pval_trend, method="fdr_bh")
+
+    # ---- XDE type classification ----
+    sig_xde = fdr_xde < fdr_threshold
+    sig_mean = fdr_mean < fdr_threshold
+    sig_trend = fdr_trend < fdr_threshold
+    xde_type = np.where(
+        sig_xde & sig_mean & sig_trend,
+        "both",
+        np.where(sig_xde & sig_mean, "mean_shift", np.where(sig_xde & sig_trend, "trend_diff", "none")),
+    )
+
+    results = (
+        pd.DataFrame(
+            {
+                "gene": gene_names,
+                "tde_stat": f_tde,
+                "tde_pval": pval_tde,
+                "tde_fdr": fdr_tde,
+                "xde_stat": f_xde,
+                "xde_pval": pval_xde,
+                "xde_fdr": fdr_xde,
+                "mean_shift_stat": f_mean,
+                "mean_shift_pval": pval_mean,
+                "mean_shift_fdr": fdr_mean,
+                "trend_diff_stat": f_trend,
+                "trend_diff_pval": pval_trend,
+                "trend_diff_fdr": fdr_trend,
+                "xde_type": xde_type,
+            }
+        )
+        .set_index("gene", drop=False)
+        .rename_axis(None)
+    )
+
+    adata.uns[key_added] = {
+        "results": results,
+        "params": {
+            "condition_key": condition_key,
+            "patient_key": patient_key,
+            "aligned_pseudotime_key": aligned_pseudotime_key,
+            "n_spline_knots": n_spline_knots,
+            "n_permutations": n_permutations,
+            "seed": seed,
+            "fdr_threshold": fdr_threshold,
+            "n_patients": n_patients,
+            "patient_ids": patient_ids,
+            "n_bins": n_bins,
+            "n_genes_tested": n_genes,
+        },
+    }
+
+    return results
+
+
 def _minmax(values: np.ndarray) -> np.ndarray:
     v = np.asarray(values, dtype=float)
     lo = np.min(v)
@@ -638,4 +956,5 @@ __all__ = [
     "temporal_kernel_pseudotime_enrichment",
     "evaluate_basal_signature_prominence",
     "compute_running_enrichment",
+    "test_differential_trajectory",
 ]

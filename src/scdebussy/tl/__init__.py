@@ -18,6 +18,7 @@ from ._trend_analysis import (
     evaluate_basal_signature_prominence,
     temporal_kernel_gene_set_rankings,
     temporal_kernel_pseudotime_enrichment,
+    test_differential_trajectory,
 )
 
 __all__ = [
@@ -39,6 +40,7 @@ __all__ = [
     "temporal_kernel_pseudotime_enrichment",
     "evaluate_basal_signature_prominence",
     "compute_running_enrichment",
+    "test_differential_trajectory",
     "initialize_structured_loadings",
     "simulate_LF_MOGP",
 ]

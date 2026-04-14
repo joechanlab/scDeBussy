@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from matplotlib import pyplot as plt
 from scripts.benchmark.compare_methods import (
     _filter_by_tuning,
     _pairwise_only_subset,
@@ -9,7 +10,12 @@ from scripts.benchmark.compare_methods import (
 )
 from scripts.benchmark.methods import available_methods
 
-from scdebussy.pl import plot_em_convergence, plot_runtime_performance_tradeoff, plot_sweep_history
+from scdebussy.pl import (
+    plot_em_convergence,
+    plot_running_enrichment_ridge,
+    plot_runtime_performance_tradeoff,
+    plot_sweep_history,
+)
 from scdebussy.tl import scDeBussy, smooth_patient_trajectory
 
 
@@ -74,6 +80,109 @@ def test_plot_sweep_history_and_runtime_tradeoff_return_figures():
     )
     fig_tradeoff = plot_runtime_performance_tradeoff(ranking_df)
     assert fig_tradeoff is not None
+
+
+def test_plot_running_enrichment_ridge_draws_transition_window_boundaries():
+    import pandas as pd
+
+    ordered_genes = ["geneA", "geneB", "geneC", "geneD", "geneE"]
+    enrichment_df = pd.DataFrame(
+        {
+            "gene_set": ["set1"] * 5 + ["set2"] * 5,
+            "position": list(range(5)) + list(range(5)),
+            "score": [0.2, 0.4, 0.8, 0.5, 0.3, 0.1, 0.5, 0.9, 0.4, 0.2],
+        }
+    )
+    gene_curve = pd.DataFrame(
+        {
+            "pseudotime": [0.0, 0.5, 1.0],
+            "geneA": [1.0, 0.1, 0.0],
+            "geneB": [0.2, 1.0, 0.1],
+            "geneC": [0.1, 0.9, 0.2],
+            "geneD": [0.0, 0.2, 1.0],
+            "geneE": [0.0, 0.1, 1.0],
+        }
+    )
+
+    fig = plot_running_enrichment_ridge(
+        enrichment_df,
+        gene_sets_to_plot=["set1", "set2"],
+        ordered_genes=ordered_genes,
+        gene_curve=gene_curve,
+        transition_window=(0.4, 0.6),
+    )
+
+    ridge_axes = fig.axes[1:]
+    assert ridge_axes
+    for ax in ridge_axes:
+        vertical_lines = [
+            line
+            for line in ax.lines
+            if len(line.get_xdata()) == 2 and np.allclose(line.get_xdata(), line.get_xdata()[0])
+        ]
+        assert len(vertical_lines) == 2
+        assert sorted(line.get_xdata()[0] for line in vertical_lines) == [1.0, 3.0]
+    plt.close(fig)
+
+
+def test_plot_running_enrichment_ridge_transition_window_no_overlap_is_noop():
+    import pandas as pd
+
+    ordered_genes = ["geneA", "geneB", "geneC"]
+    enrichment_df = pd.DataFrame(
+        {
+            "gene_set": ["set1"] * 3,
+            "position": [0, 1, 2],
+            "score": [0.2, 0.4, 0.6],
+        }
+    )
+    gene_curve = pd.DataFrame(
+        {
+            "pseudotime": [0.0, 0.5, 1.0],
+            "geneA": [1.0, 0.0, 0.0],
+            "geneB": [0.0, 1.0, 0.0],
+            "geneC": [0.0, 0.0, 1.0],
+        }
+    )
+
+    fig = plot_running_enrichment_ridge(
+        enrichment_df,
+        gene_sets_to_plot=["set1"],
+        ordered_genes=ordered_genes,
+        gene_curve=gene_curve,
+        transition_window=(1.5, 1.8),
+    )
+
+    ridge_axes = fig.axes[1:]
+    assert ridge_axes
+    for ax in ridge_axes:
+        vertical_lines = [
+            line
+            for line in ax.lines
+            if len(line.get_xdata()) == 2 and np.allclose(line.get_xdata(), line.get_xdata()[0])
+        ]
+        assert len(vertical_lines) == 0
+    plt.close(fig)
+
+
+def test_plot_running_enrichment_ridge_transition_window_requires_gene_curve():
+    import pandas as pd
+
+    enrichment_df = pd.DataFrame(
+        {
+            "gene_set": ["set1"],
+            "position": [0],
+            "score": [0.1],
+        }
+    )
+
+    with pytest.raises(ValueError, match="transition_window requires gene_curve"):
+        plot_running_enrichment_ridge(
+            enrichment_df,
+            gene_sets_to_plot=["set1"],
+            ordered_genes=["geneA"],
+            transition_window=(0.2, 0.4),
+        )
 
 
 def test_scDeBussy_logs_iteration_rmse_for_synthetic_truth(sample_adata):

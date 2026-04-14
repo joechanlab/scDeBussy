@@ -136,6 +136,9 @@ def plot_running_enrichment_ridge(
     smooth_window: int = 10,
     overlap: float = 0.5,
     short_names=None,
+    transition_window=None,
+    transition_window_color: str = "#FDEBD0",
+    transition_window_alpha: float = 0.5,
     save_path=None,
 ):
     """Plot stacked ridge plots of running gene-set enrichment along ordered genes.
@@ -170,6 +173,15 @@ def plot_running_enrichment_ridge(
     short_names : list of str, optional
         Short display names for each gene set (same order as
         ``gene_sets_to_plot``).  Defaults to cleaned versions of the set names.
+    transition_window : tuple of two floats or None, optional
+        Pseudotime interval ``(start, end)`` to mark with vertical boundary
+        lines on each ridge. Requires ``gene_curve`` to map pseudotime to gene
+        positions. Defaults to ``None`` (no transition markers).
+    transition_window_color : str, optional
+        Color used for the transition window boundary lines. Defaults to
+        ``"#FDEBD0"``.
+    transition_window_alpha : float, optional
+        Alpha value for the transition window boundary lines. Defaults to ``0.5``.
     save_path : str or None, optional
         File path to save the figure.  Defaults to ``None`` (no save).
 
@@ -181,6 +193,35 @@ def plot_running_enrichment_ridge(
     ordered_genes = list(ordered_genes)
     n_sets = len(gene_sets_to_plot)
     n_genes = len(ordered_genes)
+
+    if transition_window is not None and gene_curve is None:
+        raise ValueError("transition_window requires gene_curve to map pseudotime to gene positions.")
+
+    if transition_window is not None:
+        if len(transition_window) != 2:
+            raise ValueError("transition_window must contain exactly two values: (start, end).")
+        transition_start, transition_end = float(transition_window[0]), float(transition_window[1])
+        if not (np.isfinite(transition_start) and np.isfinite(transition_end)):
+            raise ValueError("transition_window must contain finite numeric values.")
+        if transition_start > transition_end:
+            raise ValueError("transition_window start must be <= end.")
+    else:
+        transition_start, transition_end = None, None
+
+    gene_peak_pseudotime = None
+    if gene_curve is not None:
+        pseudotime = np.asarray(gene_curve.iloc[:, 0].values, dtype=float)
+        gene_peak_pseudotime = np.full(n_genes, np.nan, dtype=float)
+        for i, gene in enumerate(ordered_genes):
+            if gene in gene_curve.columns:
+                peak_idx = int(np.argmax(gene_curve[gene].values))
+                gene_peak_pseudotime[i] = float(pseudotime[peak_idx])
+
+    transition_gene_span = None
+    if transition_start is not None and gene_peak_pseudotime is not None:
+        in_window = np.where((gene_peak_pseudotime >= transition_start) & (gene_peak_pseudotime <= transition_end))[0]
+        if in_window.size > 0:
+            transition_gene_span = (float(in_window.min()), float(in_window.max() + 1))
 
     has_bar = gene_curve is not None
     n_rows = n_sets + (1 if has_bar else 0)
@@ -198,12 +239,12 @@ def plot_running_enrichment_ridge(
     if has_bar:
         from matplotlib.colors import ListedColormap
 
-        pseudotime = gene_curve.iloc[:, 0].values
+        assert bar_ax is not None
+        assert gene_peak_pseudotime is not None
+
         gene_phases = np.zeros(n_genes, dtype=int)
-        for i, gene in enumerate(ordered_genes):
-            if gene in gene_curve.columns:
-                peak_idx = int(np.argmax(gene_curve[gene].values))
-                peak_pt = float(pseudotime[peak_idx])
+        for i, peak_pt in enumerate(gene_peak_pseudotime):
+            if np.isfinite(peak_pt):
                 if peak_pt < cutoff_points[0]:
                     gene_phases[i] = 0
                 elif peak_pt < cutoff_points[1]:
@@ -257,10 +298,29 @@ def plot_running_enrichment_ridge(
         x = subset["position"].values
         y_raw = subset["score"].values
         y = uniform_filter1d(y_raw, size=smooth_window)
+        ridge_fill_zorder = i * 3 + 1
+        ridge_line_zorder = ridge_fill_zorder + 1
+        transition_zorder = ridge_line_zorder + 1
 
-        ax_r.plot(x, y, color="white", linewidth=1.5, alpha=0.9, zorder=i * 2)
-        ax_r.fill_between(x, 0, y, color=fill_colors[i], alpha=0.8, zorder=i * 2)
-        ax_r.set_ylim(0, None)
+        if transition_gene_span is not None:
+            ax_r.axvline(
+                transition_gene_span[0],
+                color=transition_window_color,
+                alpha=transition_window_alpha,
+                linewidth=1.5,
+                zorder=transition_zorder,
+            )
+            ax_r.axvline(
+                transition_gene_span[1],
+                color=transition_window_color,
+                alpha=transition_window_alpha,
+                zorder=transition_zorder,
+                linewidth=1.5,
+            )
+
+        ax_r.plot(x, y, color="white", linewidth=1.5, alpha=0.9, zorder=ridge_line_zorder)
+        ax_r.fill_between(x, 0, y, color=fill_colors[i], alpha=0.8, zorder=ridge_fill_zorder)
+        ax_r.set_ylim(bottom=0)
         ax_r.set_xlim(0, n_genes)
         ax_r.patch.set_alpha(0)
         ax_r.set_yticks([])
