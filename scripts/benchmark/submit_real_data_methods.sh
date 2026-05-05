@@ -7,14 +7,21 @@
 # 2) Submit array:
 # conda activate /usersoftware/chanj3/scdebussy-py311/
 # bash /data1/chanj3/wangm10/scDeBussy/scripts/benchmark/submit_real_data_methods.sh \
-#   /scratch/chanj3/wangm10/HTAN/preprocessed/staged_paths.txt \
-#   /scratch/chanj3/wangm10/HTAN/results \
+#   /scratch/chanj3/wangm10/HTAN_transformed_combined/preprocessed/staged_paths.txt \
+#   /scratch/chanj3/wangm10/HTAN_transformed_combined/results \
 #   scdebussy,identity \
-#   'LUAD|SCLC-A|SCLC-N'
+#   'LUAD|SCLC-A|SCLC-N' \
+#   patient \
+#   s_local \
+#   cell_type_final2 \
+#   1 \
+#   off \
+#   1 \
+#   42
 # conda activate /usersoftware/chanj3/Lamian
 # bash /data1/chanj3/wangm10/scDeBussy/scripts/benchmark/submit_real_data_methods.sh \
-#   /scratch/chanj3/wangm10/HTAN/preprocessed/staged_paths.txt \
-#   /scratch/chanj3/wangm10/HTAN/results \
+#   /scratch/chanj3/wangm10/HTAN_transformed_combined/preprocessed/staged_paths.txt \
+#   /scratch/chanj3/wangm10/HTAN_transformed_combined/results \
 #   cellalign_fixed_reference,cellalign_consensus \
 #   'LUAD|SCLC-A|SCLC-N' \
 #   patient \
@@ -29,8 +36,8 @@
 #   '{"rscript_bin": "/usersoftware/chanj3/Lamian/bin/Rscript"}'
 # conda activate /usersoftware/chanj3/g2g_env
 # bash /data1/chanj3/wangm10/scDeBussy/scripts/benchmark/submit_real_data_methods.sh \
-#   /scratch/chanj3/wangm10/HTAN/preprocessed/staged_paths.txt \
-#   /scratch/chanj3/wangm10/HTAN/results \
+#   /scratch/chanj3/wangm10/HTAN_transformed_combined/preprocessed/staged_paths.txt \
+#   /scratch/chanj3/wangm10/HTAN_transformed_combined/results \
 #   genes2genes_consensus,genes2genes_fixed_reference \
 #   'LUAD|SCLC-A|SCLC-N' \
 #   patient \
@@ -75,10 +82,11 @@ TUNE_TRIALS="${10:-30}"
 TUNE_SEED="${11:-42}"
 PURITY_N_NEIGHBORS="${12:-50}"
 PURITY_SWEEP="${13:-1}"
+SAVE_ADATA="${14:-0}"
 
 if [[ -z "${STAGED_MANIFEST}" ]]; then
     echo "[ERROR] Missing required STAGED_MANIFEST argument."
-    echo "Usage: bash scripts/benchmark/submit_real_data_methods.sh STAGED_MANIFEST [OUTPUT_DIR] [METHODS_CSV] [CELL_TYPE_PATTERN] [PATIENT_KEY] [PSEUDOTIME_KEY] [CELL_TYPE_KEY] [SEED] [TUNE_MODE] [TUNE_TRIALS] [TUNE_SEED] [PURITY_N_NEIGHBORS] [PURITY_SWEEP]"
+    echo "Usage: bash scripts/benchmark/submit_real_data_methods.sh STAGED_MANIFEST [OUTPUT_DIR] [METHODS_CSV] [CELL_TYPE_PATTERN] [PATIENT_KEY] [PSEUDOTIME_KEY] [CELL_TYPE_KEY] [SEED] [TUNE_MODE] [TUNE_TRIALS] [TUNE_SEED] [PURITY_N_NEIGHBORS] [PURITY_SWEEP] [SAVE_ADATA]"
     exit 1
 fi
 
@@ -126,6 +134,7 @@ echo "[real-submit] Methods count    : ${N_METHODS}"
 echo "[real-submit] Array range      : 0-${ARRAY_MAX}"
 echo "[real-submit] Cell pattern     : ${CELL_TYPE_PATTERN}"
 echo "[real-submit] Tune             : mode=${TUNE_MODE} trials=${TUNE_TRIALS} seed=${TUNE_SEED}"
+echo "[real-submit] Save adata       : ${SAVE_ADATA}"
 echo "[real-submit] Dry run          : ${DRY_RUN}"
 
 SBATCH_CMD=(
@@ -133,7 +142,7 @@ SBATCH_CMD=(
     --array "0-${ARRAY_MAX}"
     --output "${OUTPUT_DIR}/logs/real_%A_%a.out"
     --error "${OUTPUT_DIR}/logs/real_%A_%a.err"
-    --export "ALL,REPO_ROOT=${REPO_ROOT},MANIFEST_METHODS=${MANIFEST_METHODS},STAGED_MANIFEST=${STAGED_MANIFEST},OUTPUT_DIR=${OUTPUT_DIR},PATIENT_KEY=${PATIENT_KEY},PSEUDOTIME_KEY=${PSEUDOTIME_KEY},CELL_TYPE_KEY=${CELL_TYPE_KEY},CELL_TYPE_PATTERN=${CELL_TYPE_PATTERN},SEED=${SEED},TUNE_MODE=${TUNE_MODE},TUNE_TRIALS=${TUNE_TRIALS},TUNE_SEED=${TUNE_SEED},PURITY_N_NEIGHBORS=${PURITY_N_NEIGHBORS},PURITY_SWEEP=${PURITY_SWEEP}"
+    --export "ALL,REPO_ROOT=${REPO_ROOT},MANIFEST_METHODS=${MANIFEST_METHODS},STAGED_MANIFEST=${STAGED_MANIFEST},OUTPUT_DIR=${OUTPUT_DIR},PATIENT_KEY=${PATIENT_KEY},PSEUDOTIME_KEY=${PSEUDOTIME_KEY},CELL_TYPE_KEY=${CELL_TYPE_KEY},CELL_TYPE_PATTERN=${CELL_TYPE_PATTERN},SEED=${SEED},TUNE_MODE=${TUNE_MODE},TUNE_TRIALS=${TUNE_TRIALS},TUNE_SEED=${TUNE_SEED},PURITY_N_NEIGHBORS=${PURITY_N_NEIGHBORS},PURITY_SWEEP=${PURITY_SWEEP},SAVE_ADATA=${SAVE_ADATA}"
     "${ARRAY_SCRIPT}"
 )
 

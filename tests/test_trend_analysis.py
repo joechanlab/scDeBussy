@@ -1,7 +1,10 @@
 import anndata as ad
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pytest
 
+from scdebussy.pl import plot_running_enrichment_ridge
 from scdebussy.tl import (
     cluster_and_order_genes,
     compute_composite_alignment_score,
@@ -9,6 +12,7 @@ from scdebussy.tl import (
     cosegment_ordered_heatmap,
     evaluate_basal_signature_prominence,
     scDeBussy,
+    select_top_hotspot_module_genes,
     temporal_kernel_gene_set_rankings,
     temporal_kernel_pseudotime_enrichment,
 )
@@ -331,3 +335,164 @@ def test_differential_trajectory_null_uniform_pvals():
     results = diff_trajectory(adata, condition_key="condition", n_permutations=200, seed=0)
     # Under the null, median p-value should be near 0.5 (not stochastically dominated by small values)
     assert results["xde_pval"].median() > 0.1
+
+
+# ---------------------------------------------------------------------------
+# select_top_hotspot_module_genes
+# ---------------------------------------------------------------------------
+
+
+def _make_hotspot_fixtures():
+    """Return (hotspot_res, module_assignments) with known Z/FDR rankings."""
+    genes = [f"g{i}" for i in range(10)]
+    hotspot_res = pd.DataFrame(
+        {
+            "Z": [9.0, 7.0, 5.0, 3.0, 1.0, 8.0, 6.0, 4.0, 2.0, 0.5],
+            "FDR": [0.001, 0.01, 0.04, 0.06, 0.5, 0.002, 0.03, 0.07, 0.4, 0.9],
+        },
+        index=genes,
+    )
+    # Modules: g0-g4 → module 1, g5-g9 → module 2
+    module_assignments = pd.Series(
+        [1, 1, 1, 1, 1, 2, 2, 2, 2, 2],
+        index=genes,
+        name="Module",
+    )
+    return hotspot_res, module_assignments
+
+
+def test_select_top_hotspot_module_genes_basic():
+    hotspot_res, module_assignments = _make_hotspot_fixtures()
+    result = select_top_hotspot_module_genes(hotspot_res, module_assignments, top_n=3)
+
+    assert set(result.keys()) == {"Module 1", "Module 2"}
+    # Module 1 FDR-sig genes (FDR <= 0.05): g0(Z=9), g1(Z=7), g2(Z=5) → top 3 in Z order
+    assert result["Module 1"] == ["g0", "g1", "g2"]
+    # Module 2 FDR-sig genes: g5(Z=8), g6(Z=6) → only 2 pass, but top_n=3 so capped at 2
+    assert result["Module 2"] == ["g5", "g6"]
+
+
+def test_select_top_hotspot_module_genes_descending_z_order():
+    hotspot_res, module_assignments = _make_hotspot_fixtures()
+    result = select_top_hotspot_module_genes(hotspot_res, module_assignments, top_n=10)
+    # All returned lists must be in descending Z-score order
+    for label, genes in result.items():
+        z_values = hotspot_res.loc[genes, "Z"].tolist()
+        assert z_values == sorted(z_values, reverse=True), f"{label} not sorted by Z descending"
+
+
+def test_select_top_hotspot_module_genes_fdr_fallback(recwarn):
+    hotspot_res, module_assignments = _make_hotspot_fixtures()
+    # Set a very strict threshold so module 1 triggers fallback (only g0 passes)
+    result = select_top_hotspot_module_genes(hotspot_res, module_assignments, fdr_threshold=0.005, min_genes=3, top_n=3)
+    # Module 1: only g0 has FDR <= 0.005 → fallback, take top 3 by Z from all module genes
+    assert result["Module 1"] == ["g0", "g1", "g2"]
+    # A UserWarning should have been emitted for the fallback
+    fallback_warnings = [
+        w for w in recwarn.list if issubclass(w.category, UserWarning) and "Module 1" in str(w.message)
+    ]
+    assert len(fallback_warnings) >= 1
+
+
+def test_select_top_hotspot_module_genes_excludes_minus_one():
+    genes = ["a", "b", "c"]
+    hotspot_res = pd.DataFrame({"Z": [5.0, 3.0, 1.0], "FDR": [0.01, 0.02, 0.03]}, index=genes)
+    module_assignments = pd.Series([-1, 1, 1], index=genes, name="Module")
+    result = select_top_hotspot_module_genes(hotspot_res, module_assignments)
+    assert "Module -1" not in result
+    assert "Module 1" in result
+    assert "a" not in result["Module 1"]
+
+
+def test_select_top_hotspot_module_genes_missing_column_raises():
+    hotspot_res = pd.DataFrame({"C": [1.0]}, index=["g0"])
+    module_assignments = pd.Series([1], index=["g0"], name="Module")
+    with pytest.raises(ValueError, match="'Z'"):
+        select_top_hotspot_module_genes(hotspot_res, module_assignments)
+
+
+def test_select_top_hotspot_module_genes_custom_cols():
+    genes = ["x", "y", "z"]
+    hotspot_res = pd.DataFrame({"zscore": [4.0, 2.0, 1.0], "adj_p": [0.01, 0.02, 0.5]}, index=genes)
+    module_assignments = pd.Series([1, 1, 1], index=genes, name="Module")
+    result = select_top_hotspot_module_genes(hotspot_res, module_assignments, z_col="zscore", fdr_col="adj_p", top_n=2)
+    assert result["Module 1"] == ["x", "y"]
+
+
+# ---------------------------------------------------------------------------
+# plot_running_enrichment_ridge — patient coverage bar
+# ---------------------------------------------------------------------------
+
+
+def _make_enrichment_fixtures(adata):
+    """Return (ordered_genes, gene_curve, enrichment_df) for ridge-plot tests."""
+    ordered = cluster_and_order_genes(adata, n_clusters=2, random_state=0)
+    ordered_genes = ordered["gene"].tolist()
+    n_genes = len(ordered_genes)
+
+    bary = adata.uns["barycenter"]
+    tau = bary["aligned_pseudotime"]
+    gene_curve = pd.DataFrame(
+        np.column_stack([tau, bary["expression"]]),
+        columns=["pseudotime"] + list(adata.var_names),
+    )
+    # Build a minimal synthetic enrichment_df (compute_running_enrichment requires
+    # ≥5 genes per set, which the tiny sample_adata cannot satisfy)
+    positions = np.arange(n_genes)
+    enrichment_df = pd.DataFrame(
+        {
+            "gene_set": np.tile(["set_a", "set_b"], n_genes),
+            "position": np.repeat(positions, 2),
+            "score": np.random.default_rng(0).standard_normal(n_genes * 2),
+        }
+    )
+    return ordered_genes, gene_curve, enrichment_df
+
+
+def test_plot_running_enrichment_ridge_coverage_bar_renders(sample_adata):
+    adata = _fit_alignment(sample_adata.copy())
+    ordered_genes, gene_curve, enrichment_df = _make_enrichment_fixtures(adata)
+
+    fig = plot_running_enrichment_ridge(
+        enrichment_df,
+        ["set_a", "set_b"],
+        ordered_genes,
+        gene_curve=gene_curve,
+        adata=adata,
+        patient_key="patient",
+        aligned_pseudotime_key="aligned_pseudotime",
+        n_coverage_bins=10,
+    )
+    assert isinstance(fig, plt.Figure)
+    # phase bar (1) + 2 ridges + coverage bar (1) = 4 axes total
+    assert len(fig.axes) == 4
+    plt.close(fig)
+
+
+def test_plot_running_enrichment_ridge_without_coverage_bar(sample_adata):
+    adata = _fit_alignment(sample_adata.copy())
+    ordered_genes, gene_curve, enrichment_df = _make_enrichment_fixtures(adata)
+
+    fig = plot_running_enrichment_ridge(
+        enrichment_df,
+        ["set_a", "set_b"],
+        ordered_genes,
+        gene_curve=gene_curve,
+    )
+    assert isinstance(fig, plt.Figure)
+    # phase bar (1) + 2 ridges, no coverage bar = 3 axes
+    assert len(fig.axes) == 3
+    plt.close(fig)
+
+
+def test_plot_running_enrichment_ridge_coverage_requires_gene_curve(sample_adata):
+    adata = _fit_alignment(sample_adata.copy())
+    ordered_genes, _, enrichment_df = _make_enrichment_fixtures(adata)
+
+    with pytest.raises(ValueError, match="gene_curve"):
+        plot_running_enrichment_ridge(
+            enrichment_df,
+            ["set_a"],
+            ordered_genes,
+            adata=adata,
+        )

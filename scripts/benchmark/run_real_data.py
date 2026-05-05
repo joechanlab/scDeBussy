@@ -120,6 +120,7 @@ def _load_and_concat(
         adatas.append(adata_i)
 
     combined = anndata.concat(adatas, join="inner", merge="same")
+    combined.obs["_orig_obs_name"] = combined.obs_names.tolist()
     combined.obs_names_make_unique()
     return combined
 
@@ -145,6 +146,7 @@ def _run_one(
     tune_seed: int = 42,
     purity_n_neighbors: int = 50,
     purity_sweep: bool = False,
+    save_adata_path: str | None = None,
 ) -> dict:
     """Execute one method on a real-data AnnData and return a serialisable result dict."""
     from scripts.benchmark.methods import run_method
@@ -255,6 +257,13 @@ def _run_one(
     method_meta = dict(method_result.get("method_meta", {}))
     unsupervised_method = dict(method_result.get("unsupervised_method", {}))
     method_params_out = dict(method_result.get("method_params", method_kwargs))
+
+    # ------------------------------------------------------------------ #
+    # 4b. Optionally persist adata with aligned column                     #
+    # ------------------------------------------------------------------ #
+    if save_adata_path is not None:
+        os.makedirs(os.path.dirname(save_adata_path), exist_ok=True)
+        adata.write_h5ad(save_adata_path)
 
     # ------------------------------------------------------------------ #
     # 5.  Compute metrics                                                  #
@@ -490,6 +499,15 @@ def main():
         dest="purity_sweep",
         help="Also compute purity at multiple k values and report sweep summary statistics.",
     )
+    parser.add_argument(
+        "--save-adata",
+        action="store_true",
+        dest="save_adata",
+        help=(
+            "Write the AnnData (with aligned pseudotime column) to "
+            "<output-dir>/<method>/real_data/seed_<seed>.h5ad alongside the JSON result."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -499,6 +517,11 @@ def main():
             overrides = json.loads(args.method_params)
         except json.JSONDecodeError as exc:
             parser.error(f"--method-params contains invalid JSON: {exc}")
+
+    save_adata_path = None
+    if args.save_adata:
+        dest_dir = os.path.join(args.output_dir, args.method, "real_data")
+        save_adata_path = os.path.join(dest_dir, f"seed_{args.seed}.h5ad")
 
     result = _run_one(
         args.adata,
@@ -515,6 +538,7 @@ def main():
         tune_seed=args.tune_seed,
         purity_n_neighbors=args.purity_n_neighbors,
         purity_sweep=args.purity_sweep,
+        save_adata_path=save_adata_path,
     )
 
     dest = _write_result(result, args.output_dir)

@@ -169,6 +169,30 @@ def _validate_advanced_alignment_inputs(
         raise ValueError("barycenter_update_iter must be at least 1.")
 
 
+def _pad_trajectory_to_barycenter(trajectory, barycenter, bary_start, bary_end, pat_start, pat_end):
+    """Resample patient crop onto the barycenter's aligned span and pad non-covered bins.
+
+    Returns a full-length (n_bins, n_genes) array where the aligned region contains the
+    patient's expression (resampled if lengths differ) and non-covered bins retain the
+    current barycenter values.  This prevents tslearn's softdtw_barycenter from receiving
+    variable-length sequences and applying its own boundary-anchored stretch (double warp).
+    """
+    padded = barycenter.copy()
+    pat_crop = trajectory[pat_start : pat_end + 1]
+    target_len = bary_end - bary_start + 1
+    if target_len <= 0:
+        return padded
+    if len(pat_crop) != target_len:
+        xs_src = np.linspace(0, 1, len(pat_crop))
+        xs_dst = np.linspace(0, 1, target_len)
+        pat_crop = np.stack(
+            [np.interp(xs_dst, xs_src, pat_crop[:, g]) for g in range(pat_crop.shape[1])],
+            axis=1,
+        )
+    padded[bary_start : bary_end + 1] = pat_crop
+    return padded
+
+
 def _fit_barycenter_from_trajectories(
     patient_trajectories,
     n_bins,
@@ -183,18 +207,23 @@ def _fit_barycenter_from_trajectories(
     dtw_window_fraction,
     barycenter_init_iter,
     barycenter_update_iter,
+    patient_weights=None,
     iteration_callback=None,
 ):
-    barycenter = softdtw_barycenter(X=patient_trajectories, gamma=gamma, max_iter=barycenter_init_iter)
+    barycenter = softdtw_barycenter(
+        X=patient_trajectories, gamma=gamma, max_iter=barycenter_init_iter, weights=patient_weights
+    )
     prev_cost = float("inf")
     warp_paths = []
     iteration_costs: list[float] = []
     converged = False
+    coverage_per_iteration: list[list[dict]] = []
 
     for iteration in range(max_iter):
-        cropped_trajectories = []
+        padded_trajectories = []
         total_cost = 0.0
         warp_paths = []
+        coverage_this_iter: list[dict] = []
 
         for trajectory in patient_trajectories:
             alignment = dtw(
@@ -212,11 +241,20 @@ def _fit_barycenter_from_trajectories(
             warp_path = list(zip(alignment.index1, alignment.index2, strict=False))
             warp_paths.append(warp_path)
 
-            start_idx = alignment.index2.min()
-            end_idx = alignment.index2.max()
-            cropped_trajectories.append(trajectory[start_idx : end_idx + 1])
+            bary_start = int(alignment.index1.min())
+            bary_end = int(alignment.index1.max())
+            pat_start = int(alignment.index2.min())
+            pat_end = int(alignment.index2.max())
+            coverage_this_iter.append(
+                {"bary_start": bary_start, "bary_end": bary_end, "pat_start": pat_start, "pat_end": pat_end}
+            )
+
+            padded_trajectories.append(
+                _pad_trajectory_to_barycenter(trajectory, barycenter, bary_start, bary_end, pat_start, pat_end)
+            )
 
         iteration_costs.append(float(total_cost))
+        coverage_per_iteration.append(coverage_this_iter)
 
         if iteration_callback is not None:
             try:
@@ -240,11 +278,15 @@ def _fit_barycenter_from_trajectories(
         prev_cost = total_cost
 
         barycenter = softdtw_barycenter(
-            X=cropped_trajectories,
+            X=padded_trajectories,
             gamma=gamma,
             max_iter=barycenter_update_iter,
             init=barycenter,
+            weights=patient_weights,
         )
+
+    # Summarise final-iteration coverage per patient
+    final_coverage = coverage_per_iteration[-1] if coverage_per_iteration else []
 
     diagnostics = {
         "iteration_costs": iteration_costs,
@@ -253,6 +295,7 @@ def _fit_barycenter_from_trajectories(
         "final_cost": float(iteration_costs[-1]) if iteration_costs else None,
         "tolerance": float(tol),
         "max_iterations": int(max_iter),
+        "coverage": final_coverage,
     }
     return barycenter, warp_paths, diagnostics
 
@@ -282,6 +325,26 @@ def _warp_path_to_grid_mapping(warp_path, n_bins):
     return patient_tau_subset, mapped_bary_tau
 
 
+def _interp_with_linear_extrap(x: np.ndarray, xp: np.ndarray, fp: np.ndarray) -> np.ndarray:
+    """Interpolate like np.interp but linearly extrapolate outside [xp[0], xp[-1]].
+
+    Values are clipped to [0, 1] afterwards; the downstream isotonic regression
+    enforces monotonicity and the same range, so this is just a better starting point
+    than constant-clip for cells that fall outside the DTW warp-path coverage.
+    """
+    result = np.interp(x, xp, fp)
+    if len(xp) >= 2:
+        left_mask = x < xp[0]
+        if np.any(left_mask):
+            slope = (fp[1] - fp[0]) / (xp[1] - xp[0] + 1e-12)
+            result[left_mask] = fp[0] + slope * (x[left_mask] - xp[0])
+        right_mask = x > xp[-1]
+        if np.any(right_mask):
+            slope = (fp[-1] - fp[-2]) / (xp[-1] - xp[-2] + 1e-12)
+            result[right_mask] = fp[-1] + slope * (x[right_mask] - xp[-1])
+    return np.clip(result, 0.0, 1.0)
+
+
 def _map_cells_to_aligned_pseudotime(
     adata,
     patient_ids,
@@ -302,7 +365,7 @@ def _map_cells_to_aligned_pseudotime(
         sorted_pseudotime = patient_pseudotime[sort_idx]
 
         patient_tau_subset, mapped_bary_tau = _warp_path_to_grid_mapping(warp_path, n_bins)
-        mapped_sorted = np.interp(sorted_pseudotime, patient_tau_subset, mapped_bary_tau)
+        mapped_sorted = _interp_with_linear_extrap(sorted_pseudotime, patient_tau_subset, mapped_bary_tau)
 
         isotonic = IsotonicRegression(increasing=True, out_of_bounds="clip", y_min=0.0, y_max=1.0)
         mapped_monotone = isotonic.fit_transform(sorted_pseudotime, mapped_sorted)
@@ -333,6 +396,7 @@ def scDeBussy(
     dtw_window_fraction=0.2,
     barycenter_init_iter=5,
     barycenter_update_iter=1,
+    group_key=None,
     rmse_truth_key="tau_global",
     log_iteration_rmse_if_available=True,
 ):
@@ -377,6 +441,11 @@ def scDeBussy(
         Number of Soft-DTW barycenter iterations used for initialization.
     barycenter_update_iter : int
         Number of Soft-DTW barycenter iterations used in each EM M-step.
+    group_key : str or None
+        Optional column in ``adata.obs`` identifying patient groups (e.g. cancer subtype).
+        When provided, per-patient weights are set to the inverse of each group's sample
+        count, normalised to sum to 1.  This counteracts sample-count imbalance between
+        groups so that a majority group does not dominate the barycenter.
     rmse_truth_key : str
         Optional ground-truth pseudotime key in ``adata.obs`` used to log
         per-iteration RMSE diagnostics when available (synthetic runs).
@@ -413,6 +482,23 @@ def scDeBussy(
         )
         patient_trajectories.append(smoothed.detach().cpu().numpy())
         patient_densities[str(patient_id)] = density.detach().cpu().numpy()
+
+    # Compute inverse-frequency weights by group to counteract sample imbalance.
+    patient_weights = None
+    group_assignments = None
+    if group_key is not None:
+        if group_key not in adata.obs.columns:
+            raise ValueError(f"group_key={group_key!r} not found in adata.obs.")
+        # Map each patient to its group (use the first cell's value)
+        group_assignments = {}
+        for pid in patient_ids:
+            grp = adata.obs.loc[adata.obs[patient_key] == pid, group_key].iloc[0]
+            group_assignments[str(pid)] = str(grp)
+        group_counts: dict[str, int] = {}
+        for grp in group_assignments.values():
+            group_counts[grp] = group_counts.get(grp, 0) + 1
+        raw_weights = np.array([1.0 / group_counts[group_assignments[str(pid)]] for pid in patient_ids])
+        patient_weights = raw_weights / raw_weights.sum()
 
     iteration_rmse_to_truth: list[float] = []
     baseline_rmse_to_truth = None
@@ -460,6 +546,7 @@ def scDeBussy(
         dtw_window_fraction=dtw_window_fraction,
         barycenter_init_iter=barycenter_init_iter,
         barycenter_update_iter=barycenter_update_iter,
+        patient_weights=patient_weights,
         iteration_callback=iteration_callback,
     )
 
@@ -485,12 +572,25 @@ def scDeBussy(
         em_convergence["baseline_rmse_to_truth"] = baseline_rmse_to_truth
         em_convergence["final_rmse_to_truth"] = final_rmse_to_truth
 
+    # Build per-patient coverage summary from the final EM iteration.
+    final_coverage = em_convergence.pop("coverage", [])
+    coverage_summary: dict = {}
+    for pid, cov in zip(patient_ids, final_coverage, strict=False):
+        coverage_summary[str(pid)] = {
+            "bary_start": cov["bary_start"],
+            "bary_end": cov["bary_end"],
+            "pat_start": cov["pat_start"],
+            "pat_end": cov["pat_end"],
+            "bary_fraction": (cov["bary_end"] - cov["bary_start"] + 1) / n_bins,
+        }
+
     adata.uns[barycenter_key] = {
         "aligned_pseudotime": np.linspace(0, 1, n_bins),
         "expression": barycenter,
         "patient_ids": list(patient_ids),
         "warp_paths": [[(int(i), int(j)) for i, j in warp_path] for warp_path in warp_paths],
         "patient_densities": patient_densities,
+        "coverage": coverage_summary,
         "em_convergence": em_convergence,
         "params": {
             "patient_key": patient_key,
@@ -508,6 +608,9 @@ def scDeBussy(
             "dtw_window_fraction": dtw_window_fraction,
             "barycenter_init_iter": barycenter_init_iter,
             "barycenter_update_iter": barycenter_update_iter,
+            "group_key": group_key,
+            "patient_weights": patient_weights.tolist() if patient_weights is not None else None,
+            "group_assignments": group_assignments,
         },
     }
 

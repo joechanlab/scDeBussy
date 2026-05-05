@@ -57,6 +57,7 @@ TUNE_SEED="${TUNE_SEED:-42}"
 PURITY_N_NEIGHBORS="${PURITY_N_NEIGHBORS:-50}"
 PURITY_SWEEP="${PURITY_SWEEP:-1}"
 METHOD_PARAMS="${METHOD_PARAMS:-}"
+SAVE_ADATA="${SAVE_ADATA:-0}"
 
 cd "${REPO_ROOT}"
 export PYTHONPATH="${REPO_ROOT}:${REPO_ROOT}/src:${PYTHONPATH:-}"
@@ -83,6 +84,10 @@ CMD=(
 
 if [[ "${PURITY_SWEEP}" == "1" ]]; then
     CMD+=(--purity-sweep)
+fi
+
+if [[ "${SAVE_ADATA}" == "1" ]]; then
+    CMD+=(--save-adata)
 fi
 
 if [[ -n "${METHOD_PARAMS}" ]]; then

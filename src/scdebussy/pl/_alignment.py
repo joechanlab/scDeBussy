@@ -1,3 +1,5 @@
+import warnings
+
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
@@ -125,6 +127,38 @@ def plot_em_convergence(adata, barycenter_key="barycenter", ax=None, figsize=(5,
     return ax
 
 
+def _compute_patient_coverage(adata, patient_key: str, pseudotime_key: str, n_bins: int) -> np.ndarray:
+    """Return shape-(n_bins,) array of fraction of patients with ≥1 cell per pseudotime bin.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data matrix with aligned pseudotime and patient labels in ``.obs``.
+    patient_key : str
+        Column in ``adata.obs`` identifying patients.
+    pseudotime_key : str
+        Column in ``adata.obs`` containing aligned pseudotime values in ``[0, 1]``.
+    n_bins : int
+        Number of uniform bins covering ``[0, 1]``.
+
+    Returns
+    -------
+    np.ndarray
+        Array of shape ``(n_bins,)`` with values in ``[0, 1]``.
+    """
+    pt = np.asarray(adata.obs[pseudotime_key].values, dtype=float)
+    patients = adata.obs[patient_key].values
+    n_patients = len(np.unique(patients))
+    edges = np.linspace(0.0, 1.0, n_bins + 1)
+    coverage = np.zeros(n_bins, dtype=float)
+    for b in range(n_bins):
+        lo, hi = edges[b], edges[b + 1]
+        mask = (pt >= lo) & (pt <= hi if b == n_bins - 1 else pt < hi)
+        n_contributing = len(np.unique(patients[mask]))
+        coverage[b] = n_contributing / n_patients if n_patients > 0 else 0.0
+    return coverage
+
+
 def plot_running_enrichment_ridge(
     enrichment_df: pd.DataFrame,
     gene_sets_to_plot: list,
@@ -139,6 +173,11 @@ def plot_running_enrichment_ridge(
     transition_window=None,
     transition_window_color: str = "#FDEBD0",
     transition_window_alpha: float = 0.5,
+    adata=None,
+    patient_key: str = "patient",
+    aligned_pseudotime_key: str = "aligned_pseudotime",
+    n_coverage_bins: int = 50,
+    coverage_cmap: str = "YlGn",
     save_path=None,
 ):
     """Plot stacked ridge plots of running gene-set enrichment along ordered genes.
@@ -182,6 +221,20 @@ def plot_running_enrichment_ridge(
         ``"#FDEBD0"``.
     transition_window_alpha : float, optional
         Alpha value for the transition window boundary lines. Defaults to ``0.5``.
+    adata : AnnData or None, optional
+        If provided, a patient-coverage bar is drawn below the ridges.  Requires
+        ``gene_curve`` to map pseudotime to gene positions.  Defaults to ``None``.
+    patient_key : str, optional
+        Column in ``adata.obs`` identifying patients.  Defaults to ``"patient"``.
+    aligned_pseudotime_key : str, optional
+        Column in ``adata.obs`` containing aligned pseudotime in ``[0, 1]``.
+        Defaults to ``"aligned_pseudotime"``.
+    n_coverage_bins : int, optional
+        Number of uniform pseudotime bins used when computing patient coverage.
+        Defaults to ``50``.
+    coverage_cmap : str, optional
+        Matplotlib colormap name for the patient-coverage bar.
+        Defaults to ``"YlGn"``.
     save_path : str or None, optional
         File path to save the figure.  Defaults to ``None`` (no save).
 
@@ -196,6 +249,9 @@ def plot_running_enrichment_ridge(
 
     if transition_window is not None and gene_curve is None:
         raise ValueError("transition_window requires gene_curve to map pseudotime to gene positions.")
+
+    if adata is not None and gene_curve is None:
+        raise ValueError("adata requires gene_curve to map patient coverage to gene positions.")
 
     if transition_window is not None:
         if len(transition_window) != 2:
@@ -224,8 +280,9 @@ def plot_running_enrichment_ridge(
             transition_gene_span = (float(in_window.min()), float(in_window.max() + 1))
 
     has_bar = gene_curve is not None
-    n_rows = n_sets + (1 if has_bar else 0)
-    height_ratios = ([0.4] if has_bar else []) + [1] * n_sets
+    has_coverage = adata is not None  # gene_curve already validated above when adata is not None
+    n_rows = n_sets + (1 if has_bar else 0) + (1 if has_coverage else 0)
+    height_ratios = ([0.4] if has_bar else []) + [1] * n_sets + ([0.3] if has_coverage else [])
 
     fig = plt.figure(figsize=figsize)
     gs_layout = gridspec.GridSpec(n_rows, 1, height_ratios=height_ratios, figure=fig)
@@ -233,7 +290,9 @@ def plot_running_enrichment_ridge(
     axes = [fig.add_subplot(gs_layout[i]) for i in range(n_rows)]
 
     bar_ax = axes[0] if has_bar else None
-    ridge_axes = axes[1:] if has_bar else axes
+    ridge_start = 1 if has_bar else 0
+    ridge_axes = axes[ridge_start : ridge_start + n_sets]
+    coverage_ax = axes[-1] if has_coverage else None
 
     # ── phase annotation bar ─────────────────────────────────────────────────
     if has_bar:
@@ -350,11 +409,318 @@ def plot_running_enrichment_ridge(
             va="bottom",
         )
 
-    # ── bottom x-axis ────────────────────────────────────────────────────────
-    bottom_ax = ridge_axes[-1]
-    bottom_ax.spines["bottom"].set_visible(True)
-    bottom_ax.set_xlabel("Gene Position", fontsize=12, fontweight="bold")
-    bottom_ax.tick_params(axis="x", which="both", bottom=True, labelbottom=True)
+    # ── bottom x-axis (on last ridge when no coverage bar, else on coverage bar) ───
+    if not has_coverage:
+        bottom_ax = ridge_axes[-1]
+        bottom_ax.spines["bottom"].set_visible(True)
+        bottom_ax.set_xlabel("Gene Position", fontsize=12, fontweight="bold")
+        bottom_ax.tick_params(axis="x", which="both", bottom=True, labelbottom=True)
+
+    # ── patient coverage bar ─────────────────────────────────────────────────
+    if has_coverage:
+        assert coverage_ax is not None
+        assert gene_peak_pseudotime is not None
+
+        _cov = _compute_patient_coverage(adata, patient_key, aligned_pseudotime_key, n_coverage_bins)
+        cov_edges = np.linspace(0.0, 1.0, n_coverage_bins + 1)
+        gene_coverage = np.zeros(n_genes, dtype=float)
+        for i in range(n_genes):
+            tau = gene_peak_pseudotime[i]
+            if np.isfinite(tau):
+                b = min(int(np.searchsorted(cov_edges[1:], tau)), n_coverage_bins - 1)
+                gene_coverage[i] = _cov[b]
+
+        coverage_ax.pcolormesh(
+            np.arange(n_genes + 1),
+            [0, 1],
+            gene_coverage.reshape(1, -1),
+            cmap=plt.get_cmap(coverage_cmap),
+            vmin=0.0,
+            vmax=1.0,
+            shading="auto",
+        )
+        coverage_ax.set_yticks([0.5])
+        coverage_ax.set_yticklabels(["% Patients"], fontsize=8)
+        coverage_ax.set_xlim(0, n_genes)
+        coverage_ax.set_xlabel("Gene Position", fontsize=12, fontweight="bold")
+        coverage_ax.tick_params(axis="x", which="both", bottom=True, labelbottom=True)
+        for s in coverage_ax.spines.values():
+            s.set_visible(False)
+        coverage_ax.spines["bottom"].set_visible(True)
+
+    if save_path:
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+
+    return fig
+
+
+def plot_gene_barycenter(
+    adata,
+    genes: list,
+    *,
+    barycenter_key: str = "barycenter",
+    aligned_pseudotime_key: str = "aligned_pseudotime",
+    cell_type_key: str | None = None,
+    patient_key: str | None = None,
+    cell_type_colors: dict | None = None,
+    phase_segments: list | None = None,
+    cell_alpha: float = 0.15,
+    cell_size: float = 2.0,
+    patient_palette: str = "tab10",
+    line_width: float = 2.0,
+    ylim: "tuple | dict | None" = None,
+    show_patient_legend: bool = True,
+    smooth_window: int = 0,
+    figsize: tuple | None = None,
+    save_path: str | None = None,
+) -> "plt.Figure":
+    """Plot barycenter gene expression curves against aligned pseudotime.
+
+    For each requested gene a panel shows individual cells as background scatter
+    points coloured by patient, with the barycenter consensus curve drawn on top.
+    An optional shared cell-type annotation strip sits above all gene panels.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Aligned AnnData with barycenter stored in ``adata.uns[barycenter_key]``.
+    genes : list of str
+        Gene names to plot (e.g. ``["ASCL1", "NEUROD1"]``).
+    barycenter_key : str, optional
+        Key in ``adata.uns`` for the barycenter. Default ``"barycenter"``.
+    aligned_pseudotime_key : str, optional
+        Column in ``adata.obs`` with aligned pseudotime in ``[0, 1]``.
+        Default ``"aligned_pseudotime"``.
+    cell_type_key : str or None, optional
+        Column in ``adata.obs`` for cell-type labels drawn in the annotation bar.
+        When ``None`` the bar is omitted.
+    patient_key : str or None, optional
+        Column in ``adata.obs`` identifying patients for scatter colouring.
+        When ``None`` all cells are plotted in a single neutral colour.
+    cell_type_colors : dict or None, optional
+        Mapping ``{cell_type: color}`` for the annotation bar.
+        Inferred from ``tab10`` when ``None``.
+    phase_segments : list of (int, int, str) or None, optional
+        Explicit ``(start_bin, end_bin, label)`` tuples — using the same bin
+        indices as the barycenter — to colour and label the annotation bar.
+        Each bin is assigned the colour of the segment it falls in.
+        When ``None``, colours are derived from the per-bin dominant cell type
+        and boundaries are inferred automatically from transitions.
+    cell_alpha : float, optional
+        Transparency for scatter points. Default ``0.15``.
+    cell_size : float, optional
+        Marker size for scatter points. Default ``2.0``.
+    patient_palette : str, optional
+        Matplotlib colormap name for patient colours. Default ``"tab10"``.
+    line_width : float, optional
+        Line width for the barycenter curve. Default ``2.0``.
+    ylim : tuple, dict, or None, optional
+        Y-axis limits for the gene panels.  Accepts:
+
+        - ``None`` (default): automatic limits.
+        - ``(ymin, ymax)``: the same limits applied to every gene panel.
+        - ``{gene: (ymin, ymax)}``: per-gene limits; genes not in the dict
+          use automatic limits.
+    show_patient_legend : bool, optional
+        Whether to draw the patient colour legend. Default ``True``.
+    smooth_window : int, optional
+        Width of the uniform smoothing kernel applied to the barycenter curve
+        before plotting.  ``0`` or ``1`` means no smoothing.  Values around
+        ``5``–``15`` remove bin-to-bin EM noise while preserving broad trends.
+        Default ``0``.
+    figsize : tuple or None, optional
+        Figure size ``(width, height)``. Inferred from gene count when ``None``.
+    save_path : str or None, optional
+        File path to save the figure. Default ``None`` (no save).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The rendered figure.
+    """
+    import scipy.sparse as sp
+
+    if barycenter_key not in adata.uns:
+        raise ValueError(f"{barycenter_key!r} not found in adata.uns.")
+
+    bary = adata.uns[barycenter_key]
+    bary_expr = np.asarray(bary["expression"], dtype=float)  # (n_bins, n_genes)
+    n_bins = bary_expr.shape[0]
+
+    gene_names = list(adata.var_names.astype(str))
+    gene_index = {g: i for i, g in enumerate(gene_names)}
+
+    valid_genes = [g for g in genes if g in gene_index]
+    missing = [g for g in genes if g not in gene_index]
+    if missing:
+        warnings.warn(f"Genes not found in adata.var_names: {missing}", stacklevel=2)
+    if not valid_genes:
+        raise ValueError("None of the requested genes are present in adata.var_names.")
+
+    n_genes = len(valid_genes)
+    has_bar = cell_type_key is not None
+
+    # ── figure layout ─────────────────────────────────────────────────────────
+    if figsize is None:
+        figsize = (5.0, 2.2 * n_genes + (0.5 if has_bar else 0.0))
+
+    height_ratios = ([0.15] if has_bar else []) + [1.0] * n_genes
+    n_rows = len(height_ratios)
+    fig = plt.figure(figsize=figsize)
+    gs = gridspec.GridSpec(n_rows, 1, height_ratios=height_ratios, figure=fig, hspace=0.5)
+
+    gene_offset = 1 if has_bar else 0
+    bar_ax = fig.add_subplot(gs[0]) if has_bar else None
+    gene_axes = []
+    for i in range(n_genes):
+        share = bar_ax if (has_bar and i == 0) else (gene_axes[0] if i > 0 else None)
+        gene_axes.append(fig.add_subplot(gs[gene_offset + i], sharex=share))
+
+    # ── cell-type annotation bar ──────────────────────────────────────────────
+    if has_bar:
+        if phase_segments is not None:
+            # Assign each bin the label of the segment it falls in.
+            label_by_bin = np.full(n_bins, "Unassigned", dtype=object)
+            for left_b, right_b, seg_label in phase_segments:
+                label_by_bin[left_b : min(right_b + 1, n_bins)] = seg_label
+            dominant_by_bin = label_by_bin.tolist()
+        else:
+            ct_obs = adata.obs[cell_type_key].astype(str).to_numpy()
+            aligned_pt_obs = adata.obs[aligned_pseudotime_key].to_numpy(dtype=float)
+            valid_mask = np.isfinite(aligned_pt_obs)
+            bin_idx_obs = np.clip((aligned_pt_obs[valid_mask] * (n_bins - 1)).astype(int), 0, n_bins - 1)
+            ct_valid = ct_obs[valid_mask]
+            dominant_by_bin = []
+            for b in range(n_bins):
+                labels_b = ct_valid[bin_idx_obs == b]
+                if len(labels_b) == 0:
+                    dominant_by_bin.append("Unassigned")
+                else:
+                    dominant_by_bin.append(str(pd.Series(labels_b).value_counts().index[0]))
+
+        unique_types = sorted({d for d in dominant_by_bin if d != "Unassigned"})
+        if cell_type_colors is None:
+            cmap_tab = plt.cm.get_cmap("tab10")
+            cell_type_colors = {ct: cmap_tab(i % 10) for i, ct in enumerate(unique_types)}
+
+        bar_rgba = np.array(
+            [[plt.matplotlib.colors.to_rgba(cell_type_colors.get(d, "#808080")) for d in dominant_by_bin]]
+        )
+        bar_ax.imshow(bar_rgba, aspect="auto", extent=[-0.5, n_bins - 0.5, 0.0, 1.0], interpolation="nearest")
+        bar_ax.set_xlim(-0.5, n_bins - 0.5)
+        bar_ax.set_yticks([])
+        bar_ax.tick_params(axis="x", bottom=False, top=False, labelbottom=False, labeltop=False)
+        for spine in bar_ax.spines.values():
+            spine.set_visible(False)
+
+        if phase_segments is not None:
+            for left_b, right_b, seg_label in phase_segments:
+                center_bin = (left_b + min(right_b, n_bins - 1)) / 2.0
+                bar_ax.text(center_bin, -0.65, seg_label, ha="center", va="bottom", fontsize=9, clip_on=False)
+            for _, right_b, _ in phase_segments[:-1]:
+                bar_ax.axvline(right_b + 0.5, color="white", linewidth=1.2, alpha=0.95)
+        else:
+            for t in range(1, n_bins):
+                if dominant_by_bin[t] != dominant_by_bin[t - 1]:
+                    bar_ax.axvline(t - 0.5, color="white", linewidth=1.0, alpha=0.8)
+
+    # ── patient colour map ────────────────────────────────────────────────────
+    patient_labels_all = None
+    unique_patients: list = []
+    patient_color_map: dict = {}
+    if patient_key is not None:
+        patient_labels_all = adata.obs[patient_key].astype(str).to_numpy()
+        unique_patients = sorted(np.unique(patient_labels_all).tolist())
+        n_patients = len(unique_patients)
+        pat_cmap = plt.cm.get_cmap(patient_palette)
+        patient_color_map = {p: pat_cmap(i / max(n_patients - 1, 1)) for i, p in enumerate(unique_patients)}
+
+    # ── per-gene panels ───────────────────────────────────────────────────────
+    # Convert cell pseudotime [0, 1] → bin scale [0, n_bins-1] for a consistent x-axis.
+    aligned_pt_all = adata.obs[aligned_pseudotime_key].to_numpy(dtype=float)
+    valid_cell_mask = np.isfinite(aligned_pt_all)
+    pt_valid_bins = aligned_pt_all[valid_cell_mask] * (n_bins - 1)
+
+    bary_x = np.arange(n_bins, dtype=float)  # bin indices 0 … n_bins-1
+
+    for i, gene in enumerate(valid_genes):
+        ax = gene_axes[i]
+        g_idx = gene_index[gene]
+
+        col = adata.X[:, g_idx]
+        expr_all = np.asarray(col.todense()).ravel() if sp.issparse(col) else np.asarray(col, dtype=float).ravel()
+        expr_valid = expr_all[valid_cell_mask]
+
+        # Z-score using barycenter mean/std across bins (same reference as the heatmap).
+        bary_y_raw = bary_expr[:, g_idx]
+        mu = bary_y_raw.mean()
+        sigma = bary_y_raw.std() + 1e-12
+        expr_valid = (expr_valid - mu) / sigma
+        bary_y = (bary_y_raw - mu) / sigma
+
+        if smooth_window > 1:
+            bary_y = uniform_filter1d(bary_y, size=smooth_window)
+
+        if patient_key is not None:
+            patients_valid = patient_labels_all[valid_cell_mask]
+            for patient in unique_patients:
+                pmask = patients_valid == patient
+                ax.scatter(
+                    pt_valid_bins[pmask],
+                    expr_valid[pmask],
+                    c=[patient_color_map[patient]],
+                    s=cell_size,
+                    alpha=cell_alpha,
+                    linewidths=0,
+                    rasterized=True,
+                )
+        else:
+            ax.scatter(
+                pt_valid_bins,
+                expr_valid,
+                c="#888888",
+                s=cell_size,
+                alpha=cell_alpha,
+                linewidths=0,
+                rasterized=True,
+            )
+
+        ax.plot(bary_x, bary_y, color="black", linewidth=line_width, zorder=5)
+
+        # y-axis limits
+        if isinstance(ylim, dict):
+            gene_ylim = ylim.get(gene)
+        else:
+            gene_ylim = ylim
+        if gene_ylim is not None:
+            ax.set_ylim(gene_ylim)
+
+        ax.set_title(gene, fontsize=11, fontweight="bold")
+        ax.set_ylabel("Z-scored expression", fontsize=10)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        if i < n_genes - 1:
+            ax.tick_params(axis="x", labelbottom=False)
+        else:
+            ax.set_xlabel("Aligned pseudotime bin", fontsize=11)
+
+    # ── patient legend ────────────────────────────────────────────────────────
+    if show_patient_legend and patient_key is not None and patient_color_map:
+        from matplotlib.lines import Line2D
+
+        handles = [
+            Line2D([0], [0], marker="o", color="w", markerfacecolor=patient_color_map[p], markersize=5, label=p)
+            for p in unique_patients
+        ]
+        gene_axes[-1].legend(
+            handles=handles,
+            title="Patient",
+            bbox_to_anchor=(1.01, 1.0),
+            loc="upper left",
+            frameon=False,
+            fontsize=8,
+            title_fontsize=8,
+        )
 
     if save_path:
         fig.savefig(save_path, dpi=300, bbox_inches="tight")

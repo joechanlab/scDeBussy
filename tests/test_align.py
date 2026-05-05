@@ -409,3 +409,187 @@ def test_genes2genes_ambiguous_alias_is_not_registered():
     assert "genes2genes_fixed_reference" in methods
     assert "genes2genes_consensus" in methods
     assert "genes2genes_pairwise" in methods
+
+
+# ---------------------------------------------------------------------------
+# Tests for RC2 fix: barycenter-padded M-step trajectories
+# ---------------------------------------------------------------------------
+
+
+def test_scDeBussy_coverage_diagnostics_present(sample_adata):
+    scDeBussy(
+        sample_adata,
+        patient_key="patient",
+        pseudotime_key="s_local",
+        n_bins=12,
+        bandwidth=0.15,
+        max_iter=3,
+        dtw_open_begin=True,
+        dtw_open_end=True,
+    )
+
+    bary = sample_adata.uns["barycenter"]
+    assert "coverage" in bary
+    assert set(bary["coverage"].keys()) == {"patient1", "patient2"}
+    for _pid, cov in bary["coverage"].items():
+        assert "bary_start" in cov and "bary_end" in cov
+        assert "pat_start" in cov and "pat_end" in cov
+        assert "bary_fraction" in cov
+        assert 0.0 < cov["bary_fraction"] <= 1.0
+        assert cov["bary_start"] <= cov["bary_end"]
+
+
+def test_scDeBussy_coverage_full_when_open_begin_false(sample_adata):
+    """With open_begin=False the alignment is anchored at the start; bary_start should be 0."""
+    scDeBussy(
+        sample_adata,
+        patient_key="patient",
+        pseudotime_key="s_local",
+        n_bins=12,
+        bandwidth=0.15,
+        max_iter=3,
+        dtw_open_begin=False,
+        dtw_open_end=False,
+    )
+
+    bary = sample_adata.uns["barycenter"]
+    for cov in bary["coverage"].values():
+        assert cov["bary_start"] == 0
+        assert cov["bary_end"] == 11  # n_bins - 1
+        assert cov["bary_fraction"] == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# Tests for RC1 fix: group_key inverse-frequency weighting
+# ---------------------------------------------------------------------------
+
+
+def _make_imbalanced_adata(n_majority=10, n_minority=2, n_cells=20, n_genes=4):
+    """Build an AnnData with majority/minority groups of patients."""
+    import anndata as ad
+    import pandas as pd
+
+    rng = np.random.default_rng(0)
+    patients, groups, pseudotimes, X_rows = [], [], [], []
+    idx = 0
+    for i in range(n_majority):
+        pid = f"maj_{i}"
+        pt = np.linspace(0.0, 1.0, n_cells)
+        patients.extend([pid] * n_cells)
+        groups.extend(["majority"] * n_cells)
+        pseudotimes.extend(pt.tolist())
+        X_rows.append(rng.random((n_cells, n_genes)))
+        idx += n_cells
+    for i in range(n_minority):
+        pid = f"min_{i}"
+        pt = np.linspace(0.0, 1.0, n_cells)
+        patients.extend([pid] * n_cells)
+        groups.extend(["minority"] * n_cells)
+        pseudotimes.extend(pt.tolist())
+        X_rows.append(rng.random((n_cells, n_genes)))
+        idx += n_cells
+
+    X = np.vstack(X_rows).astype(float)
+    obs = pd.DataFrame(
+        {"patient": patients, "group": groups, "s_local": pseudotimes},
+        index=[f"c{i}" for i in range(len(patients))],
+    )
+    return ad.AnnData(X=X, obs=obs, var=pd.DataFrame(index=[f"g{i}" for i in range(n_genes)]))
+
+
+def test_scDeBussy_group_key_produces_valid_weights():
+    adata = _make_imbalanced_adata(n_majority=6, n_minority=2, n_cells=10, n_genes=3)
+    scDeBussy(
+        adata,
+        patient_key="patient",
+        pseudotime_key="s_local",
+        n_bins=10,
+        bandwidth=0.2,
+        max_iter=2,
+        group_key="group",
+    )
+
+    params = adata.uns["barycenter"]["params"]
+    weights = params["patient_weights"]
+    assert weights is not None
+    assert len(weights) == 8  # 6 majority + 2 minority
+    assert abs(sum(weights) - 1.0) < 1e-9
+
+    # minority patients should each have higher weight than majority patients
+    group_assignments = params["group_assignments"]
+    patient_ids = adata.uns["barycenter"]["patient_ids"]
+    maj_weights = [w for pid, w in zip(patient_ids, weights, strict=False) if group_assignments[pid] == "majority"]
+    min_weights = [w for pid, w in zip(patient_ids, weights, strict=False) if group_assignments[pid] == "minority"]
+    assert all(mw > majw for mw in min_weights for majw in maj_weights)
+
+
+def test_scDeBussy_group_key_invalid_column_raises(sample_adata):
+    with pytest.raises(ValueError, match="group_key"):
+        scDeBussy(
+            sample_adata,
+            patient_key="patient",
+            pseudotime_key="s_local",
+            n_bins=10,
+            group_key="nonexistent_column",
+        )
+
+
+def test_scDeBussy_group_key_none_produces_no_weights(sample_adata):
+    scDeBussy(
+        sample_adata,
+        patient_key="patient",
+        pseudotime_key="s_local",
+        n_bins=12,
+        bandwidth=0.15,
+        max_iter=2,
+        group_key=None,
+    )
+    params = sample_adata.uns["barycenter"]["params"]
+    assert params["patient_weights"] is None
+    assert params["group_assignments"] is None
+
+
+# ---------------------------------------------------------------------------
+# Tests for RC3 fix: linear extrapolation at warp path boundaries
+# ---------------------------------------------------------------------------
+
+
+def test_interp_with_linear_extrap_clips_to_unit_interval():
+    from scdebussy.tl._alignment import _interp_with_linear_extrap
+
+    xp = np.array([0.3, 0.5, 0.7])
+    fp = np.array([0.4, 0.5, 0.6])
+
+    # Values well outside range should still stay in [0, 1]
+    x = np.array([0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0])
+    result = _interp_with_linear_extrap(x, xp, fp)
+
+    assert result.shape == x.shape
+    assert np.all(result >= 0.0)
+    assert np.all(result <= 1.0)
+
+
+def test_interp_with_linear_extrap_is_monotone_for_linear_mapping():
+    from scdebussy.tl._alignment import _interp_with_linear_extrap
+
+    xp = np.linspace(0.2, 0.8, 10)
+    fp = np.linspace(0.1, 0.9, 10)
+    x = np.linspace(0.0, 1.0, 30)
+
+    result = _interp_with_linear_extrap(x, xp, fp)
+    # Result should be monotonically non-decreasing (linear map extrapolated linearly)
+    assert np.all(np.diff(result) >= -1e-10)
+
+
+def test_interp_differs_from_clip_outside_range():
+    from scdebussy.tl._alignment import _interp_with_linear_extrap
+
+    xp = np.array([0.4, 0.6])
+    fp = np.array([0.3, 0.7])
+
+    x_left = np.array([0.1, 0.2, 0.3])
+    clip_result = np.interp(x_left, xp, fp)  # all equal to fp[0] = 0.3
+    extrap_result = _interp_with_linear_extrap(x_left, xp, fp)
+
+    # linear extrapolation should give values < fp[0] for x < xp[0]
+    assert np.all(extrap_result < clip_result)

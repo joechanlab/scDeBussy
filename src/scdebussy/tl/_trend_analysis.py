@@ -296,6 +296,57 @@ def compute_trend_recurrence_score(
     }
 
 
+def compute_patient_coverage(
+    adata,
+    *,
+    patient_key: str = "patient",
+    aligned_pseudotime_key: str = "aligned_pseudotime",
+    barycenter_key: str = "barycenter",
+) -> np.ndarray:
+    """Compute per-bin patient coverage fraction.
+
+    For each barycenter pseudotime bin, returns the fraction of patients that
+    contributed at least one cell to that bin.  Useful for annotating
+    heatmaps and other bin-indexed figures with data-density information.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data matrix.  Must have ``aligned_pseudotime_key`` in
+        ``.obs`` and the barycenter stored in ``.uns[barycenter_key]``.
+    patient_key : str, optional
+        Column in ``adata.obs`` identifying patients.
+        Defaults to ``"patient"``.
+    aligned_pseudotime_key : str, optional
+        Column in ``adata.obs`` containing aligned pseudotime in ``[0, 1]``.
+        Defaults to ``"aligned_pseudotime"``.
+    barycenter_key : str, optional
+        Key in ``adata.uns`` where the barycenter is stored.
+        Defaults to ``"barycenter"``.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(n_bins,)`` with values in ``[0, 1]`` where ``1.0`` means
+        every patient has at least one cell in that bin.
+    """
+    n_bins = int(adata.uns[barycenter_key]["expression"].shape[0])
+    pt = np.asarray(adata.obs[aligned_pseudotime_key].values, dtype=float)
+    patients = adata.obs[patient_key].astype(str).values
+    n_patients = len(np.unique(patients))
+
+    valid = np.isfinite(pt)
+    bin_idx = np.clip((pt[valid] * (n_bins - 1)).astype(int), 0, n_bins - 1)
+    patients_valid = patients[valid]
+
+    coverage = np.zeros(n_bins, dtype=float)
+    for b in range(n_bins):
+        mask = bin_idx == b
+        if mask.any():
+            coverage[b] = len(np.unique(patients_valid[mask])) / n_patients
+    return coverage
+
+
 def _equal_size_segments(n_items: int, n_segments: int) -> list[tuple[int, int]]:
     edges = np.linspace(0, n_items, n_segments + 1).round().astype(int)
     edges[0] = 0
@@ -946,6 +997,98 @@ def _minmax(values: np.ndarray) -> np.ndarray:
     return (v - lo) / (hi - lo)
 
 
+def select_top_hotspot_module_genes(
+    hotspot_res: pd.DataFrame,
+    module_assignments: pd.Series,
+    *,
+    top_n: int = 20,
+    fdr_threshold: float = 0.05,
+    min_genes: int = 5,
+    z_col: str = "Z",
+    fdr_col: str = "FDR",
+) -> dict[str, list[str]]:
+    """Select top representative genes per hotspot module ranked by Z-score.
+
+    Genes are filtered by FDR significance and then ranked by their hotspot
+    local-autocorrelation Z-score, which measures how consistently a gene
+    co-varies with its neighbors along the graph.  For modules where fewer
+    than ``min_genes`` pass the FDR threshold the filter is relaxed and all
+    module genes are ranked by Z-score instead.
+
+    Parameters
+    ----------
+    hotspot_res : pd.DataFrame
+        Per-gene hotspot statistics (index = gene names).  Must contain the
+        columns named by ``z_col`` and ``fdr_col``.
+    module_assignments : pd.Series
+        Series indexed by gene name whose values are integer module labels.
+        Genes with module label ``-1`` (hotspot's *unassigned* sentinel) are
+        excluded.
+    top_n : int, optional
+        Maximum number of top genes to return per module.  Defaults to ``20``.
+    fdr_threshold : float, optional
+        Maximum FDR value for a gene to be considered significant.  Genes with
+        ``fdr_col > fdr_threshold`` are excluded unless the fallback is
+        triggered.  Defaults to ``0.05``.
+    min_genes : int, optional
+        Minimum number of FDR-significant genes required before the fallback is
+        triggered.  When a module has fewer than ``min_genes`` significant
+        genes, all module genes (regardless of FDR) are ranked instead and a
+        :mod:`warnings` message is emitted.  Defaults to ``5``.
+    z_col : str, optional
+        Name of the column in ``hotspot_res`` holding the Z-score.  Defaults
+        to ``"Z"``.
+    fdr_col : str, optional
+        Name of the column in ``hotspot_res`` holding the FDR.  Defaults to
+        ``"FDR"``.
+
+    Returns
+    -------
+    dict[str, list[str]]
+        Mapping from ``"Module {id}"`` to a list of gene names ordered by
+        descending Z-score (highest first).
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> hotspot_res = pd.DataFrame(
+    ...     {"Z": [5.0, 3.0, 1.0, 4.0], "FDR": [0.01, 0.04, 0.2, 0.03]},
+    ...     index=["GeneA", "GeneB", "GeneC", "GeneD"],
+    ... )
+    >>> module_assignments = pd.Series([1, 1, 1, 2], index=["GeneA", "GeneB", "GeneC", "GeneD"], name="Module")
+    >>> select_top_hotspot_module_genes(hotspot_res, module_assignments, top_n=2)
+    {'Module 1': ['GeneA', 'GeneB'], 'Module 2': ['GeneD']}
+    """
+    import warnings
+
+    if z_col not in hotspot_res.columns:
+        raise ValueError(f"Column {z_col!r} not found in hotspot_res. Available: {hotspot_res.columns.tolist()}")
+    if fdr_col not in hotspot_res.columns:
+        raise ValueError(f"Column {fdr_col!r} not found in hotspot_res. Available: {hotspot_res.columns.tolist()}")
+
+    merged = hotspot_res[[z_col, fdr_col]].join(module_assignments.rename("_module"), how="inner")
+
+    result: dict[str, list[str]] = {}
+    for mod_id, grp in merged.groupby("_module"):
+        if mod_id == -1:
+            continue
+        sig = grp[grp[fdr_col] <= fdr_threshold]
+        if len(sig) >= min_genes:
+            pool = sig
+        else:
+            warnings.warn(
+                f"Module {mod_id}: only {len(sig)} genes pass FDR <= {fdr_threshold} "
+                f"(need >= {min_genes}); falling back to all {len(grp)} module genes.",
+                UserWarning,
+                stacklevel=2,
+            )
+            pool = grp
+        top_genes = pool.nlargest(top_n, z_col).index.tolist()
+        result[f"Module {mod_id}"] = top_genes
+
+    return result
+
+
 __all__ = [
     "cosegment_ordered_heatmap",
     "compute_gene_trend_features",
@@ -957,4 +1100,5 @@ __all__ = [
     "evaluate_basal_signature_prominence",
     "compute_running_enrichment",
     "test_differential_trajectory",
+    "select_top_hotspot_module_genes",
 ]
