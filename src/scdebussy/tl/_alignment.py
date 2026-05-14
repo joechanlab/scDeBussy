@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from dtw import dtw
+from scipy.ndimage import gaussian_filter1d as _gaussian_filter1d
 from scipy.special import logsumexp as _logsumexp
 from sklearn.isotonic import IsotonicRegression
 from tslearn.barycenters import softdtw_barycenter
@@ -377,20 +378,36 @@ def _compute_distance_matrix(A: np.ndarray, B: np.ndarray, dist_method: str) -> 
 
 
 def _forward_backward_open(
-    delta: np.ndarray, gamma: float, window_size: int, bary_min: int = 0, bary_max: int | None = None
+    delta: np.ndarray,
+    gamma: float,
+    window_size: int,
+    bary_min: int = 0,
+    bary_max: int | None = None,
+    advance_mask: np.ndarray | None = None,
 ) -> tuple:
     """Expected alignment matrix for asymmetric open-ended soft-DTW.
 
-    Transitions: (1,0) patient advances / barycenter stays; (1,1) both advance.
-    Open begin: path may start at any barycenter bin when t=0.
-    Open end: path may terminate at any barycenter bin when t=T-1.
-    Every patient bin is visited exactly once, so rows of A_bar sum to 1.
+    Transitions available at each patient bin t:
+      (1,0) always valid — patient advances, barycenter stays.
+      (1,1), (1,2), (1,3) — both advance (at different speeds).  Only valid when
+            advance_mask[t] is True (or advance_mask is None).  This allows the caller
+            to block advance steps for LLR-extrapolated bins (no real cells) so that
+            the path cannot gallop through barycenter regions those bins never occupied.
+    The skip steps (1,2)/(1,3) let patients with a short phase stretch across the full
+    barycenter phase, and patients missing a middle segment skip it cleanly.
+    Open begin/end: path may start/end at any barycenter bin.
+    Every patient bin is visited exactly once (all steps advance t by 1), so rows
+    of A_bar sum to 1.
 
     Parameters
     ----------
     delta : (T, T) pairwise distance matrix Delta[t, t'] = d(X_p(t), B(t')).
     gamma : soft-DTW temperature parameter.
     window_size : Sakoe-Chiba half-width in bins.
+    bary_min, bary_max : optional column masking for per-patient coverage windows.
+    advance_mask : optional bool array of shape (T,).  When False at bin t, only the
+        (1,0) stay-step is valid; (1,1)/(1,2)/(1,3) are blocked.  Use this to prevent
+        LLR-extrapolated bins from advancing the barycenter.
 
     Returns
     -------
@@ -418,11 +435,25 @@ def _forward_backward_open(
     log_alpha[0] = log_p[0]  # open begin: all barycenter start positions valid
 
     for t in range(1, T):
-        from_vert = log_alpha[t - 1]  # (1,0): from (t-1, t')
-        from_diag = np.empty(T)
-        from_diag[0] = -np.inf
-        from_diag[1:] = log_alpha[t - 1, :-1]  # (1,1): from (t-1, t'-1)
-        log_alpha[t] = log_p[t] + np.logaddexp(from_vert, from_diag)
+        from_vert = log_alpha[t - 1]  # (1,0): always valid
+        if advance_mask is None or advance_mask[t]:
+            from_diag = np.empty(T)
+            from_diag[0] = -np.inf
+            from_diag[1:] = log_alpha[t - 1, :-1]  # (1,1)
+            from_skip2 = np.empty(T)
+            from_skip2[:2] = -np.inf
+            from_skip2[2:] = log_alpha[t - 1, :-2]  # (1,2)
+            from_skip3 = np.empty(T)
+            from_skip3[:3] = -np.inf
+            from_skip3[3:] = log_alpha[t - 1, :-3]  # (1,3)
+            log_alpha[t] = log_p[t] + np.logaddexp(
+                np.logaddexp(from_vert, from_diag),
+                np.logaddexp(from_skip2, from_skip3),
+            )
+        else:
+            # LLR-extrapolated bin: only stay-step is valid.
+            # The path holds the current barycenter position instead of advancing.
+            log_alpha[t] = log_p[t] + from_vert
 
     # Partition function: sum over all terminal barycenter positions (open end)
     terminal = log_alpha[T - 1]
@@ -437,13 +468,30 @@ def _forward_backward_open(
     log_beta[T - 1, out_of_band[T - 1]] = -np.inf
 
     for t in range(T - 2, -1, -1):
-        # Successor (1,0): (t, t') -> (t+1, t')
+        # Successor (1,0): always valid — (t, t') -> (t+1, t')
         to_vert = log_beta[t + 1] + log_p[t + 1]
-        # Successor (1,1): (t, t') -> (t+1, t'+1)
-        to_diag = np.empty(T)
-        to_diag[T - 1] = -np.inf
-        to_diag[:-1] = log_beta[t + 1, 1:] + log_p[t + 1, 1:]
-        log_beta[t] = np.logaddexp(to_vert, to_diag)
+        if advance_mask is None or advance_mask[t + 1]:
+            # Successor (1,1): (t, t') -> (t+1, t'+1)
+            to_diag = np.empty(T)
+            to_diag[T - 1] = -np.inf
+            to_diag[:-1] = log_beta[t + 1, 1:] + log_p[t + 1, 1:]
+            # Successor (1,2): (t, t') -> (t+1, t'+2)
+            to_skip2 = np.empty(T)
+            to_skip2[T - 1] = -np.inf
+            to_skip2[T - 2] = -np.inf
+            to_skip2[:-2] = log_beta[t + 1, 2:] + log_p[t + 1, 2:]
+            # Successor (1,3): (t, t') -> (t+1, t'+3)
+            to_skip3 = np.empty(T)
+            to_skip3[T - 1] = -np.inf
+            to_skip3[T - 2] = -np.inf
+            to_skip3[T - 3] = -np.inf
+            to_skip3[:-3] = log_beta[t + 1, 3:] + log_p[t + 1, 3:]
+            log_beta[t] = np.logaddexp(
+                np.logaddexp(to_vert, to_diag),
+                np.logaddexp(to_skip2, to_skip3),
+            )
+        else:
+            log_beta[t] = to_vert
 
     # Expected alignment matrix A_bar[t,t'] = alpha[t,t'] * beta[t,t'] / Z
     log_A = log_alpha + log_beta - log_Z
@@ -460,28 +508,40 @@ def _fit_barycenter_soft_em(
     tol,
     verbose,
     dtw_dist_method,
-    dtw_window_fraction,
-    dtw_open_begin,
-    dtw_open_end,
     barycenter_init_iter,
-    barycenter_update_iter,
     patient_weights=None,
     iteration_callback=None,
+    patient_densities=None,
 ):
     """Proper soft-EM for DTW barycenter alignment.
 
     E-step: compute expected alignment matrix A_bar_p via forward-backward on the
-    open-ended DTW lattice (replaces hard Viterbi path).
-    M-step: soft-warp each patient trajectory into barycenter space via A_bar_p,
-    then run softdtw_barycenter on the warped trajectories.  This restores the
-    optimization power of softdtw_barycenter while keeping probabilistic E-step
-    assignments, and avoids the coverage-collapse at open-end extremes that the
-    plain closed-form average suffers from.
+    open-ended DTW lattice (replaces hard Viterbi path).  No Sakoe-Chiba band is used:
+    the band would force partial patients to advance into barycenter regions they don't
+    cover, pulling LUAD cells into the SCLC region.  Without the band the path can stay
+    at the coverage boundary via (1,0) steps, which is the correct open-end behaviour.
+
+    When patient_densities is provided, each row of the distance matrix is scaled by
+    (median_density / bin_density), capped at 5×.  This inflates the cost for LLR-
+    extrapolated bins (low kernel-density, no real cells), causing the path to collapse
+    them onto a single barycenter position via (1,0) stay-steps rather than advancing
+    through intermediate barycenter regions that the patient never actually traversed.
+    Patients with missing middle segments (e.g. LUAD+SCLC-N without SCLC-A) therefore
+    skip the SCLC-A barycenter region instead of mapping their interpolated expression
+    into it.
+
+    M-step: direct coverage-weighted average — B[t'] = sum_p w_p A_bar_p[:,t'] X_p
+    divided by sum_p w_p A_bar_p[:,t'].sum().  Bins not covered by any patient retain
+    the previous B value rather than being pulled toward zero.  A Gaussian smoothing
+    pass (sigma=2 bins) removes sharp coverage-boundary artefacts.
     The objective -sum_p w_p log Z_p is guaranteed non-increasing each iteration.
     """
     T = n_bins
-    window_size = max(1, int(dtw_window_fraction * T))
     P = len(patient_trajectories)
+    # Half-length window: large enough that a patient at bin t can stay at any
+    # barycenter bin within T//2 steps (so partial patients covering [0, T//2] can
+    # always hold position at their coverage boundary via (1,0) stay-steps).
+    fb_window = max(T // 2, 1)
 
     if patient_weights is None:
         patient_weights = np.ones(P) / P
@@ -501,7 +561,21 @@ def _fit_barycenter_soft_em(
 
         for p, traj in enumerate(patient_trajectories):
             delta = _compute_distance_matrix(traj, B, dtw_dist_method)
-            A_bar, log_Z = _forward_backward_open(delta, gamma, window_size)
+            advance_mask = None
+            if patient_densities is not None:
+                d = np.asarray(patient_densities[p], dtype=float)
+                pos_d = d[d > 1e-6]
+                if pos_d.size > 0:
+                    ref_d = float(np.median(pos_d))
+                    # Inflate cost rows by (ref / density), capped at 5×, to penalise
+                    # LLR-extrapolated bins that are far from real cells.
+                    row_weights = np.clip(ref_d / (d + 1e-8), 1.0, 5.0)
+                    delta = delta * row_weights[:, None]
+                    # Hard constraint: bins below 5% of peak density are LLR-only.
+                    # Block (1,1)/(1,2)/(1,3) advance steps so the path cannot
+                    # gallop through barycenter regions no real cells ever occupied.
+                    advance_mask = d >= (d.max() * 0.05)
+            A_bar, log_Z = _forward_backward_open(delta, gamma, fb_window, advance_mask=advance_mask)
             alignment_matrices.append(A_bar)
             total_neg_log_Z -= float(patient_weights[p]) * log_Z
 
@@ -548,44 +622,42 @@ def _fit_barycenter_soft_em(
             break
         prev_cost = total_neg_log_Z
 
-        # M-step: soft-warp each patient into barycenter space via A_bar, then run
-        # softdtw_barycenter on the warped trajectories.  Per-row normalisation by
-        # A_bar column sums prevents coverage collapse at open-end extremes.
-        soft_aligned = []
-        for traj, A_bar in zip(patient_trajectories, alignment_matrices, strict=False):
-            warped = A_bar.T @ traj  # (T, K)
-            row_sums = A_bar.sum(axis=0)[:, None] + 1e-8  # (T, 1)
-            soft_aligned.append(warped / row_sums)
-        B = softdtw_barycenter(
-            X=soft_aligned,
-            gamma=gamma,
-            max_iter=barycenter_update_iter,
-            init=B,
-            weights=patient_weights,
-        )
+        # M-step: direct coverage-weighted average.
+        # B[t'] = (sum_p w_p * A_bar_p[:, t'].T @ X_p) / (sum_p w_p * A_bar_p[:, t'].sum())
+        # Bins where total weighted coverage is negligible retain the previous B value
+        # so that uncovered patients don't drag those bins toward zero expression.
+        K = B.shape[1]
+        numerator = np.zeros((T, K))
+        denominator = np.zeros(T)
+        for p, (traj, A_bar) in enumerate(zip(patient_trajectories, alignment_matrices, strict=False)):
+            w = float(patient_weights[p])
+            numerator += w * (A_bar.T @ np.asarray(traj))
+            denominator += w * A_bar.sum(axis=0)
+        covered = denominator > (1.0 / (P * T))
+        B = np.where(covered[:, None], numerator / (denominator[:, None] + 1e-8), B)
 
-    # Final warp paths via hard DTW against converged B (used for cell mapping).
+    # Smooth the converged barycenter to remove sharp coverage-boundary artefacts.
+    B = _gaussian_filter1d(B, sigma=2, axis=0)
+
+    # Derive warp paths from the last E-step A_bar.  Use the expected barycenter bin
+    # (weighted mean over t') rather than argmax: it's smoother, approximately monotone,
+    # and avoids discrete jumps from ties or diffuse probability near coverage boundaries.
+    coverage_threshold = 1.0 / (P * T)
     warp_paths = []
     final_coverage: list[dict] = []
-    for traj in patient_trajectories:
-        traj_arr = np.asarray(traj)
-        alignment = dtw(
-            x=traj_arr,
-            y=B,
-            dist_method=dtw_dist_method,
-            step_pattern="asymmetric",
-            open_begin=dtw_open_begin,
-            open_end=dtw_open_end,
-            window_type="sakoechiba",
-            window_args={"window_size": window_size},
-        )
-        warp_paths.append(list(zip(alignment.index1, alignment.index2, strict=False)))
+    for A_bar in alignment_matrices:
+        row_sums = A_bar.sum(axis=1) + 1e-8
+        expected_bary = (A_bar * np.arange(T)[None, :]).sum(axis=1) / row_sums
+        bary_bins = np.clip(np.round(expected_bary).astype(int), 0, T - 1).tolist()
+        warp_paths.append(list(zip(range(T), bary_bins, strict=False)))
+        bary_marg = A_bar.sum(axis=0)
+        covered_cols = np.where(bary_marg > coverage_threshold)[0]
         final_coverage.append(
             {
-                "bary_start": int(alignment.index2.min()),
-                "bary_end": int(alignment.index2.max()),
-                "pat_start": int(alignment.index1.min()),
-                "pat_end": int(alignment.index1.max()),
+                "bary_start": int(covered_cols[0]) if covered_cols.size else 0,
+                "bary_end": int(covered_cols[-1]) if covered_cols.size else T - 1,
+                "pat_start": 0,
+                "pat_end": T - 1,
             }
         )
 
@@ -896,13 +968,10 @@ def scDeBussy(
             tol=tol,
             verbose=verbose,
             dtw_dist_method=dtw_dist_method,
-            dtw_window_fraction=dtw_window_fraction,
-            dtw_open_begin=dtw_open_begin,
-            dtw_open_end=dtw_open_end,
             barycenter_init_iter=barycenter_init_iter,
-            barycenter_update_iter=barycenter_update_iter,
             patient_weights=patient_weights,
             iteration_callback=iteration_callback,
+            patient_densities=[patient_densities[str(pid)] for pid in patient_ids],
         )
     else:
         barycenter, warp_paths, em_convergence = _fit_barycenter_from_trajectories(

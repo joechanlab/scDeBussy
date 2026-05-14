@@ -474,6 +474,7 @@ def plot_gene_barycenter(
     smooth_window: int = 0,
     figsize: tuple | None = None,
     save_path: str | None = None,
+    cell_type_min_patients: int = 1,
 ) -> "plt.Figure":
     """Plot barycenter gene expression curves against aligned pseudotime.
 
@@ -533,6 +534,12 @@ def plot_gene_barycenter(
         Figure size ``(width, height)``. Inferred from gene count when ``None``.
     save_path : str or None, optional
         File path to save the figure. Default ``None`` (no save).
+    cell_type_min_patients : int, optional
+        Minimum number of distinct patients that must have cells in a barycenter
+        bin for that bin to receive a cell-type label in the annotation bar.
+        Bins backed by fewer patients are shown as "Unassigned" (grey).  Requires
+        ``patient_key`` to be set; ignored when ``patient_key`` is ``None`` or
+        ``phase_segments`` is provided.  Default ``1`` (no filtering).
 
     Returns
     -------
@@ -591,10 +598,17 @@ def plot_gene_barycenter(
             valid_mask = np.isfinite(aligned_pt_obs)
             bin_idx_obs = np.clip((aligned_pt_obs[valid_mask] * (n_bins - 1)).astype(int), 0, n_bins - 1)
             ct_valid = ct_obs[valid_mask]
+            # Patient labels per cell for the min-patients filter (None if not applicable).
+            pat_valid = None
+            if patient_key is not None and cell_type_min_patients > 1:
+                pat_valid = adata.obs[patient_key].astype(str).to_numpy()[valid_mask]
             dominant_by_bin = []
             for b in range(n_bins):
-                labels_b = ct_valid[bin_idx_obs == b]
+                bin_mask = bin_idx_obs == b
+                labels_b = ct_valid[bin_mask]
                 if len(labels_b) == 0:
+                    dominant_by_bin.append("Unassigned")
+                elif pat_valid is not None and len(np.unique(pat_valid[bin_mask])) < cell_type_min_patients:
                     dominant_by_bin.append("Unassigned")
                 else:
                     dominant_by_bin.append(str(pd.Series(labels_b).value_counts().index[0]))

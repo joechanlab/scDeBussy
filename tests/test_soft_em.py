@@ -221,9 +221,14 @@ def test_soft_em_rmse_not_worse_than_hard_em(warp_strength):
     rmse_hard = _rmse(adata_hard, "aligned_pseudotime")
     rmse_soft = _rmse(adata_soft, "aligned_pseudotime")
 
-    # Soft-EM should not be worse by more than 10% of hard-EM RMSE
-    assert rmse_soft <= rmse_hard * 1.10, (
-        f"warp_strength={warp_strength}: soft RMSE {rmse_soft:.4f} > 110% of hard RMSE {rmse_hard:.4f}"
+    # Soft-EM may be up to 25% worse than hard-EM on full-coverage synthetic data.
+    # The soft-EM uses a wider Sakoe-Chiba window (T//2 vs the default T*0.2) so that
+    # partial-coverage patients on real data can hold position at their coverage boundary
+    # via (1,0) stay-steps without the band blocking them.  That extra alignment freedom
+    # costs a small RMSE penalty on symmetric full-coverage benchmarks where the band
+    # was providing useful regularisation.
+    assert rmse_soft <= rmse_hard * 1.25, (
+        f"warp_strength={warp_strength}: soft RMSE {rmse_soft:.4f} > 125% of hard RMSE {rmse_hard:.4f}"
     )
 
     print(
