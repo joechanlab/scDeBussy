@@ -16,12 +16,12 @@ python scripts/benchmark/prepare_real_data_inputs.py \
   --path-list /home/wangm10/HTA.lung.NE_plasticity_scDeBussy/figures/figure4/Basal/figure_4_adata_path.xlsx \
   --label-csv /data1/chanj3/HTA.lung.NE_plasticity.120122/Numbat_All/cell_type_labels.csv \
   --samples RU1083,RU263,RU1444,RU151,RU1303,RU581,RU831,RU1646,RU942 \
-  --staging-dir /scratch/chanj3/wangm10/HTAN/preprocessed/ \
-  --staged-manifest /scratch/chanj3/wangm10/HTAN/preprocessed/staged_paths.txt \
+  --staging-dir /scratch/chanj3/wangm10/HTAN_transformed_combined/preprocessed/ \
+  --staged-manifest /scratch/chanj3/wangm10/HTAN_transformed_combined/preprocessed/staged_paths.txt \
   --patient-key patient \
   --pseudotime-key s_local \
   --cell-type-key cell_type_final2 \
-  --tumor-cell-types "LUAD,LUSC,SCLC-A,SCLC-N,EMT,FOXI1+ NonNE SCLC,NonNE SCLC" \
+  --tumor-cell-types "LUAD,SCLC-A,SCLC-N" \
   --pseudotime-column-field pseudotime_col \
   --clip-low 1 \
   --clip-high 99 \
@@ -74,7 +74,11 @@ def main() -> None:
     parser.add_argument("--path-list", required=True, help="Excel path manifest (Sheet1).")
     parser.add_argument("--label-csv", required=True, help="CSV with cell barcode index and label column.")
     parser.add_argument("--label-column", default="cell_type", help="Column name in --label-csv to use as labels.")
-    parser.add_argument("--samples", required=True, help="Comma-separated patient IDs to process.")
+    parser.add_argument(
+        "--samples",
+        default=None,
+        help="Comma-separated patient IDs to process. If omitted, all rows in the manifest are used.",
+    )
     parser.add_argument("--staging-dir", required=True, help="Directory to write staged per-patient h5ad files.")
     parser.add_argument(
         "--staged-manifest",
@@ -102,6 +106,18 @@ def main() -> None:
         default="pseudotime_col",
         help="Column in Sheet1 that stores each patient's raw pseudotime column name.",
     )
+    parser.add_argument(
+        "--group-key",
+        default=None,
+        dest="group_key",
+        help="obs column name written for the group/condition label. If omitted, no group column is added.",
+    )
+    parser.add_argument(
+        "--group-column-field",
+        default="condition",
+        dest="group_column_field",
+        help="Column in the Excel Sheet1 that stores each patient's group/condition label.",
+    )
     parser.add_argument("--clip-low", type=float, default=1.0, help="Lower percentile for clipping.")
     parser.add_argument("--clip-high", type=float, default=99.0, help="Upper percentile for clipping.")
     parser.add_argument(
@@ -112,9 +128,17 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    samples = _parse_csv_list(args.samples)
+    path_df = pd.read_excel(args.path_list, sheet_name="Sheet1", index_col=0)
+
+    if args.group_key is not None and args.group_column_field not in path_df.columns:
+        raise ValueError(
+            f"--group-column-field {args.group_column_field!r} not found in manifest. "
+            f"Available: {path_df.columns.tolist()}"
+        )
+
+    samples = _parse_csv_list(args.samples) if args.samples is not None else path_df.index.astype(str).tolist()
     if not samples:
-        raise ValueError("--samples resolved to an empty list.")
+        raise ValueError("No samples to process — manifest is empty and --samples was not provided.")
 
     tumor_cell_types = set(_parse_csv_list(args.tumor_cell_types))
     if not tumor_cell_types:
@@ -122,7 +146,6 @@ def main() -> None:
 
     os.makedirs(args.staging_dir, exist_ok=True)
 
-    path_df = pd.read_excel(args.path_list, sheet_name="Sheet1", index_col=0)
     labels_df = pd.read_csv(args.label_csv, index_col=0)
     if args.label_column not in labels_df.columns:
         raise ValueError(f"Label CSV missing column {args.label_column!r}. Available: {labels_df.columns.tolist()}")
@@ -184,6 +207,9 @@ def main() -> None:
 
         adata.obs[args.pseudotime_key] = (np.clip(raw_pt, vmin, vmax) - vmin) / (vmax - vmin)
         adata.obs[args.patient_key] = patient
+
+        if args.group_key is not None:
+            adata.obs[args.group_key] = str(path_df.loc[patient, args.group_column_field])
 
         adata = _make_portable_adata(adata)
 

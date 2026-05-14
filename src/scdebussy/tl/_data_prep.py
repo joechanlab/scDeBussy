@@ -39,7 +39,13 @@ def filter_informative_genes(
     species: str = "hsapiens_gene_ensembl",
     host: str = "http://www.ensembl.org",
 ) -> ad.AnnData:
-    """Keep informative genes using Ensembl protein-coding annotation plus regex filters."""
+    """Mark informative genes using Ensembl protein-coding annotation plus regex filters.
+
+    All genes are retained in the returned AnnData.  Selected genes are flagged
+    with ``adata.var["informative_gene"] = True``; non-selected genes get ``False``.
+    Pass ``gene_subset_key="informative_gene"`` to :func:`scDeBussy` so that only the
+    marked genes are used for alignment while all genes remain accessible in the object.
+    """
     gene_names = pd.Index(adata.var_names.astype(str))
     upper_names = gene_names.str.upper()
     regex_exclude = np.asarray(
@@ -74,16 +80,17 @@ def filter_informative_genes(
     if not np.any(keep_mask):
         raise ValueError("Informative-gene filter removed all genes.")
 
-    filtered = adata[:, keep_mask].copy()
-    filtered.var["informative_gene"] = True
-    filtered.uns["informative_gene_filter"] = {
+    result = adata.copy()
+    result.var["informative_gene"] = keep_mask
+    result.uns["informative_gene_filter"] = {
         "annotation_source": annotation_source,
         "species": species,
         "host": host,
         "n_genes_before": int(adata.n_vars),
-        "n_genes_after": int(filtered.n_vars),
+        "n_genes_after": int(np.sum(keep_mask)),
+        "selected_gene_names": list(gene_names[keep_mask].astype(str)),
     }
-    return filtered
+    return result
 
 
 def filter_recurrent_hvgs(
@@ -94,7 +101,13 @@ def filter_recurrent_hvgs(
     min_patients: int | None = None,
     layer_name: str = "counts",
 ) -> tuple[ad.AnnData, pd.Series]:
-    """Keep genes that are highly variable in at least ``min_patients`` samples."""
+    """Mark genes that are highly variable in at least ``min_patients`` samples.
+
+    All genes are retained in the returned AnnData.  Selected genes are flagged
+    with ``adata.var["recurrent_hvg"] = True``; non-selected genes get ``False``.
+    Pass ``gene_subset_key="recurrent_hvg"`` to :func:`scDeBussy` so that only the
+    marked genes are used for alignment while all genes remain accessible in the object.
+    """
     patient_ids = adata.obs[patient_key].astype(str).unique().tolist()
     n_patients = len(patient_ids)
     if n_patients < 2:
@@ -128,16 +141,17 @@ def filter_recurrent_hvgs(
             f"and min_patients={min_patients}."
         )
 
-    filtered = adata[:, recurrent_mask.to_numpy()].copy()
-    filtered.var["recurrent_hvg"] = True
-    filtered.uns["recurrent_hvg_filter"] = {
+    result = adata.copy()
+    result.var["recurrent_hvg"] = recurrent_mask.values
+    result.uns["recurrent_hvg_filter"] = {
         "top_per_patient": int(top_per_patient),
         "min_patients": int(min_patients),
         "n_patients": int(n_patients),
-        "n_genes_selected": int(filtered.n_vars),
+        "n_genes_selected": int(recurrent_mask.sum()),
         "source_layer": layer_name if layer_name in adata.layers else "X",
+        "selected_gene_names": list(adata.var_names.astype(str)[recurrent_mask.values]),
     }
-    return filtered, gene_counts.sort_values(ascending=False)
+    return result, gene_counts.sort_values(ascending=False)
 
 
 S_GENES_TIROSH = [

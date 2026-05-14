@@ -277,7 +277,7 @@ def test_scDeBussy_validates_advanced_parameters(sample_adata, kwargs, match):
 
 
 def test_smooth_patient_trajectory_returns_expected_shapes(sample_adata):
-    smoothed, density = smooth_patient_trajectory(
+    smoothed, density, variance = smooth_patient_trajectory(
         sample_adata,
         patient_id="patient1",
         patient_key="patient",
@@ -288,7 +288,9 @@ def test_smooth_patient_trajectory_returns_expected_shapes(sample_adata):
 
     assert tuple(smoothed.shape) == (9, sample_adata.n_vars)
     assert tuple(density.shape) == (9,)
+    assert tuple(variance.shape) == (9, sample_adata.n_vars)
     assert np.all(density.numpy() > 0)
+    assert np.all(variance.numpy() >= 0)
 
 
 def test_compare_methods_excludes_pairwise_only_from_single_axis_ranking():

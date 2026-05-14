@@ -130,6 +130,20 @@ def _load_and_concat(
 # ---------------------------------------------------------------------------
 
 
+def _sanitize_obs_categoricals(adata) -> None:
+    """Cast categorical obs columns with non-string categories to str in-place.
+
+    h5py raises TypeError when writing categoricals whose .categories array
+    contains non-string objects (e.g. integer Phenograph cluster IDs).
+    """
+    import pandas as pd
+
+    for col in adata.obs.columns:
+        s = adata.obs[col]
+        if hasattr(s, "cat") and not pd.api.types.is_string_dtype(s.cat.categories):
+            adata.obs[col] = s.astype(str).astype("category")
+
+
 def _run_one(
     adata_paths: list[str],
     seed: int,
@@ -138,6 +152,7 @@ def _run_one(
     patient_key: str,
     pseudotime_key: str,
     cell_type_key: str,
+    group_key: str | None = None,
     patient_labels: list[str] | None = None,
     cell_type_pattern: str | None = None,
     method_overrides: dict | None = None,
@@ -147,6 +162,12 @@ def _run_one(
     purity_n_neighbors: int = 50,
     purity_sweep: bool = False,
     save_adata_path: str | None = None,
+    use_informative_gene_filter: bool = False,
+    use_recurrent_hvg_filter: bool = False,
+    hvg_top_per_patient: int = 3000,
+    hvg_min_patients: int | None = None,
+    hvg_layer: str = "counts",
+    use_soft_em: bool = False,
 ) -> dict:
     """Execute one method on a real-data AnnData and return a serialisable result dict."""
     from scripts.benchmark.methods import run_method
@@ -192,6 +213,30 @@ def _run_one(
         adata = adata[mask].copy()
 
     # ------------------------------------------------------------------ #
+    # 1c. Optional gene filtering                                          #
+    # ------------------------------------------------------------------ #
+    gene_filter_info: dict = {"informative": None, "recurrent_hvg": None}
+    gene_subset_key_determined: str | None = None
+    if use_informative_gene_filter or use_recurrent_hvg_filter:
+        from scdebussy.tl import filter_informative_genes, filter_recurrent_hvgs
+
+        if use_informative_gene_filter:
+            adata = filter_informative_genes(adata)
+            gene_filter_info["informative"] = dict(adata.uns.get("informative_gene_filter", {}))
+            gene_subset_key_determined = "informative_gene"
+
+        if use_recurrent_hvg_filter:
+            adata, _ = filter_recurrent_hvgs(
+                adata,
+                patient_key=patient_key,
+                top_per_patient=hvg_top_per_patient,
+                min_patients=hvg_min_patients,
+                layer_name=hvg_layer,
+            )
+            gene_filter_info["recurrent_hvg"] = dict(adata.uns.get("recurrent_hvg_filter", {}))
+            gene_subset_key_determined = "recurrent_hvg"
+
+    # ------------------------------------------------------------------ #
     # 2.  Build method kwargs                                              #
     # ------------------------------------------------------------------ #
     method_kwargs: dict = {}
@@ -201,6 +246,20 @@ def _run_one(
     # Inject obs key names so adapters can pick them up
     method_kwargs.setdefault("patient_key", patient_key)
     method_kwargs.setdefault("pseudotime_key", pseudotime_key)
+    if group_key is not None:
+        method_kwargs.setdefault("group_key", group_key)
+
+    # scDeBussy: pass gene_subset_key so it uses only selected genes for alignment
+    # while preserving all genes in adata.  Other methods receive a subsetted adata.
+    if gene_subset_key_determined is not None:
+        if method == "scdebussy":
+            method_kwargs.setdefault("gene_subset_key", gene_subset_key_determined)
+        else:
+            gene_mask = adata.var[gene_subset_key_determined].astype(bool).values
+            adata = adata[:, gene_mask].copy()
+
+    if use_soft_em and method == "scdebussy":
+        method_kwargs.setdefault("use_soft_em", True)
 
     # ------------------------------------------------------------------ #
     # 3.  Optional tuning                                                  #
@@ -263,6 +322,7 @@ def _run_one(
     # ------------------------------------------------------------------ #
     if save_adata_path is not None:
         os.makedirs(os.path.dirname(save_adata_path), exist_ok=True)
+        _sanitize_obs_categoricals(adata)
         adata.write_h5ad(save_adata_path)
 
     # ------------------------------------------------------------------ #
@@ -339,12 +399,14 @@ def _run_one(
             "patient_key": patient_key,
             "pseudotime_key": pseudotime_key,
             "cell_type_key": cell_type_key,
+            "group_key": group_key,
         },
         "cell_type_filter": {
             "pattern": cell_type_pattern,
             "n_cells_before": n_cells_before_filter,
             "n_cells_after": int(adata.n_obs),
         },
+        "gene_filter": gene_filter_info,
     }
 
 
@@ -451,6 +513,15 @@ def main():
         help="adata.obs column for cell-type labels (used for purity metrics).",
     )
     parser.add_argument(
+        "--group-key",
+        default=None,
+        dest="group_key",
+        help=(
+            "adata.obs column for patient group/condition labels. "
+            "When set, scDeBussy uses inverse-frequency weighting so each group contributes equally to the barycenter."
+        ),
+    )
+    parser.add_argument(
         "--cell-type-pattern",
         default=None,
         dest="cell_type_pattern",
@@ -508,6 +579,50 @@ def main():
             "<output-dir>/<method>/real_data/seed_<seed>.h5ad alongside the JSON result."
         ),
     )
+    parser.add_argument(
+        "--gene-filter",
+        action="store_true",
+        dest="gene_filter",
+        help=(
+            "Apply recurrent HVG filter before alignment: keeps genes that are "
+            "highly variable in at least ceil(n_patients/2) patients."
+        ),
+    )
+    parser.add_argument(
+        "--informative-gene-filter",
+        action="store_true",
+        dest="informative_gene_filter",
+        help="Apply protein-coding / informative-gene filter before alignment (drops MT-, RPS/RPL, ORF genes).",
+    )
+    parser.add_argument(
+        "--hvg-top-per-patient",
+        default=3000,
+        type=int,
+        dest="hvg_top_per_patient",
+        help="Top N genes by dispersion to select per patient for recurrent HVG filtering.",
+    )
+    parser.add_argument(
+        "--hvg-min-patients",
+        default=None,
+        type=int,
+        dest="hvg_min_patients",
+        help="Minimum patients a gene must be HVG in. Defaults to ceil(n_patients/2).",
+    )
+    parser.add_argument(
+        "--hvg-layer",
+        default="counts",
+        dest="hvg_layer",
+        help="AnnData layer used for HVG dispersion computation (falls back to X if absent).",
+    )
+    parser.add_argument(
+        "--use-soft-em",
+        action="store_true",
+        dest="use_soft_em",
+        help=(
+            "Use proper soft-EM (forward-backward) instead of hard Viterbi EM for scDeBussy alignment. "
+            "Only applies when --method scdebussy is set."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -530,6 +645,7 @@ def main():
         patient_key=args.patient_key,
         pseudotime_key=args.pseudotime_key,
         cell_type_key=args.cell_type_key,
+        group_key=args.group_key,
         patient_labels=args.patient_labels,
         cell_type_pattern=args.cell_type_pattern,
         method_overrides=overrides,
@@ -539,6 +655,12 @@ def main():
         purity_n_neighbors=args.purity_n_neighbors,
         purity_sweep=args.purity_sweep,
         save_adata_path=save_adata_path,
+        use_informative_gene_filter=args.informative_gene_filter,
+        use_recurrent_hvg_filter=args.gene_filter,
+        hvg_top_per_patient=args.hvg_top_per_patient,
+        hvg_min_patients=args.hvg_min_patients,
+        hvg_layer=args.hvg_layer,
+        use_soft_em=args.use_soft_em,
     )
 
     dest = _write_result(result, args.output_dir)

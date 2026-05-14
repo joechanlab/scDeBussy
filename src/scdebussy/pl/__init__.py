@@ -3,6 +3,7 @@ from ._alignment import (
     plot_em_convergence,
     plot_gene_barycenter,
     plot_running_enrichment_ridge,
+    plot_warp_celltype_map,
 )
 from ._metrics import cross_batch_purity_sweep, plot_runtime_performance_tradeoff, plot_sweep_history
 
@@ -14,4 +15,5 @@ __all__ = [
     "plot_running_enrichment_ridge",
     "plot_sweep_history",
     "plot_runtime_performance_tradeoff",
+    "plot_warp_celltype_map",
 ]

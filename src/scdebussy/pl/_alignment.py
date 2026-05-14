@@ -1,5 +1,6 @@
 import warnings
 
+import matplotlib.colors as mcolors
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
@@ -724,5 +725,233 @@ def plot_gene_barycenter(
 
     if save_path:
         fig.savefig(save_path, dpi=300, bbox_inches="tight")
+
+    return fig
+
+
+def plot_warp_celltype_map(
+    adata,
+    cell_type_key: str,
+    barycenter_key: str = "barycenter",
+    patient_key: str | None = None,
+    pseudotime_key: str | None = None,
+    cell_type_colors: dict | None = None,
+    highlight_gene: str | None = None,
+    figsize: tuple | None = None,
+    title: str | None = None,
+    save_path: str | None = None,
+) -> "plt.Figure":
+    """Diagnostic heatmap of patient pseudotime bin → barycenter mapping, coloured by majority cell type.
+
+    Each row represents one patient.  Each column is a barycenter bin.  The colour
+    at ``(patient, barycenter_bin)`` reflects the majority cell type of the patient
+    cells whose local pseudotime mapped to that barycenter position via the DTW warp
+    path.  Grey cells indicate barycenter bins not covered by that patient.
+
+    Useful for debugging unexpected gene expression patterns — e.g., a gene that
+    should peak in one cell type but appears dominated by another in the barycenter.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data matrix after running ``scDeBussy.fit()``.
+    cell_type_key : str
+        Key in ``adata.obs`` containing cell type labels.
+    barycenter_key : str, optional
+        Key in ``adata.uns`` where barycenter results are stored.  Default ``"barycenter"``.
+    patient_key : str, optional
+        Key in ``adata.obs`` for patient/batch IDs.  Inferred from stored params if ``None``.
+    pseudotime_key : str, optional
+        Key in ``adata.obs`` for local pseudotime.  Inferred from stored params if ``None``.
+    cell_type_colors : dict, optional
+        ``{cell_type_label: color}`` mapping.  Falls back to ``adata.uns[f"{cell_type_key}_colors"]``
+        when available, otherwise uses ``tab20``.
+    highlight_gene : str, optional
+        If given, draw the barycenter expression curve for this gene in a panel above the
+        heatmap so you can correlate the expression peak with cell-type contributions.
+    figsize : tuple, optional
+        Figure size ``(width, height)``.  Auto-scaled from patient count when ``None``.
+    title : str, optional
+        Heatmap title.  A default descriptive title is used when ``None``.
+    save_path : str, optional
+        If given, save the figure to this path at 150 dpi.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> scdebussy.pl.plot_warp_celltype_map(adata, cell_type_key="cell_type", highlight_gene="CHGA")
+    """
+    if barycenter_key not in adata.uns:
+        raise ValueError(f"{barycenter_key!r} not found in adata.uns. Run scDeBussy first.")
+
+    bary = adata.uns[barycenter_key]
+    params = bary.get("params", {})
+
+    if patient_key is None:
+        patient_key = params.get("patient_key", "patient")
+    if pseudotime_key is None:
+        pseudotime_key = params.get("pseudotime_key", "pseudotime")
+
+    n_bins = int(params.get("n_bins", np.asarray(bary["expression"]).shape[0]))
+    patient_ids = list(bary["patient_ids"])
+    warp_paths = bary["warp_paths"]  # list[list[tuple[int, int]]]
+
+    # ── cell-type colour map ──────────────────────────────────────────────────
+    all_celltypes = sorted(adata.obs[cell_type_key].astype(str).unique().tolist())
+    if cell_type_colors is None:
+        uns_key = f"{cell_type_key}_colors"
+        if uns_key in adata.uns:
+            cats = list(adata.obs[cell_type_key].astype("category").cat.categories.astype(str))
+            cell_type_colors = dict(zip(cats, adata.uns[uns_key], strict=False))
+        else:
+            cmap_auto = plt.cm.get_cmap("tab20", len(all_celltypes))
+            cell_type_colors = {ct: cmap_auto(i) for i, ct in enumerate(all_celltypes)}
+
+    # ── build majority-cell-type grid: (n_patients × n_bins) ─────────────────
+    # None means uncovered (no cells map to that barycenter bin for this patient).
+    grid: list[list[str | None]] = [[None] * n_bins for _ in range(len(patient_ids))]
+
+    for p_idx, pid in enumerate(patient_ids):
+        pat_mask = adata.obs[patient_key].astype(str) == str(pid)
+        pat_obs = adata.obs[pat_mask]
+        if pat_obs.empty:
+            continue
+
+        pt_vals = pat_obs[pseudotime_key].values.astype(float)
+        bin_assignments = np.floor(pt_vals * n_bins).astype(int).clip(0, n_bins - 1)
+        pat_celltypes = pat_obs[cell_type_key].astype(str).values
+
+        warp = warp_paths[p_idx]  # list of (pat_bin, bary_bin)
+
+        # Group warp path by barycenter bin to collect contributing patient bins.
+        bary_to_pat_bins: dict[int, list[int]] = {}
+        for pat_bin, bary_bin in warp:
+            bary_to_pat_bins.setdefault(bary_bin, []).append(pat_bin)
+
+        for bary_bin, pat_bins in bary_to_pat_bins.items():
+            cell_mask = np.isin(bin_assignments, pat_bins)
+            if cell_mask.sum() > 0:
+                counts = pd.Series(pat_celltypes[cell_mask]).value_counts()
+                grid[p_idx][bary_bin] = counts.index[0]
+
+    # ── resolve highlight gene if requested ──────────────────────────────────
+    gene_expr: np.ndarray | None = None
+    if highlight_gene is not None:
+        gene_names = list(adata.var_names.astype(str))
+        if highlight_gene not in gene_names:
+            warnings.warn(f"Gene {highlight_gene!r} not found in adata.var_names; skipping overlay.", stacklevel=2)
+        else:
+            bary_expr = np.asarray(bary["expression"], dtype=float)
+            g_idx = gene_names.index(highlight_gene)
+            gene_expr = bary_expr[:, g_idx]
+
+    # ── figure layout ─────────────────────────────────────────────────────────
+    n_patients = len(patient_ids)
+    if figsize is None:
+        heatmap_h = max(3.0, 0.32 * n_patients)
+        gene_h = 1.8 if gene_expr is not None else 0.0
+        figsize = (14, heatmap_h + gene_h + 1.5)
+
+    has_gene_panel = gene_expr is not None
+    if has_gene_panel:
+        fig = plt.figure(figsize=figsize)
+        gs = gridspec.GridSpec(
+            3,
+            1,
+            height_ratios=[1.8, max(3.0, 0.32 * n_patients), 1.0],
+            hspace=0.12,
+            figure=fig,
+        )
+        ax_gene = fig.add_subplot(gs[0])
+        ax_main = fig.add_subplot(gs[1], sharex=ax_gene)
+        ax_legend = fig.add_subplot(gs[2])
+    else:
+        fig = plt.figure(figsize=figsize)
+        gs = gridspec.GridSpec(
+            2,
+            1,
+            height_ratios=[max(3.0, 0.32 * n_patients), 1.0],
+            hspace=0.12,
+            figure=fig,
+        )
+        ax_main = fig.add_subplot(gs[0])
+        ax_legend = fig.add_subplot(gs[1])
+        ax_gene = None
+    ax_legend.axis("off")
+
+    # ── gene expression panel ─────────────────────────────────────────────────
+    if has_gene_panel and ax_gene is not None:
+        ax_gene.plot(np.arange(n_bins), gene_expr, color="#333333", linewidth=1.8)
+        ax_gene.fill_between(np.arange(n_bins), gene_expr, alpha=0.15, color="#333333")
+        ax_gene.set_ylabel(f"{highlight_gene}\n(barycenter)", fontsize=9)
+        ax_gene.set_xlim(-0.5, n_bins - 0.5)
+        ax_gene.tick_params(axis="x", labelbottom=False)
+        ax_gene.spines["top"].set_visible(False)
+        ax_gene.spines["right"].set_visible(False)
+        ax_gene.set_title(
+            title or "Patient pseudotime bin → barycenter mapping (majority cell type)",
+            fontsize=11,
+            pad=6,
+        )
+
+    # ── build RGBA image for the heatmap ─────────────────────────────────────
+    uncovered_rgba = np.array([0.92, 0.92, 0.92, 1.0])
+    rgba = np.tile(uncovered_rgba, (n_patients, n_bins, 1))
+
+    used_celltypes: set[str] = set()
+    for p_idx in range(n_patients):
+        for b_idx in range(n_bins):
+            ct = grid[p_idx][b_idx]
+            if ct is not None:
+                used_celltypes.add(ct)
+                color = cell_type_colors.get(ct, "#808080")
+                rgba[p_idx, b_idx] = mcolors.to_rgba(color)
+
+    ax_main.imshow(rgba, aspect="auto", interpolation="nearest", origin="upper")
+
+    # ── heatmap aesthetics ────────────────────────────────────────────────────
+    ax_main.set_yticks(range(n_patients))
+    label_size = max(5, min(9, 180 // max(n_patients, 1)))
+    ax_main.set_yticklabels(patient_ids, fontsize=label_size)
+    ax_main.set_xlim(-0.5, n_bins - 0.5)
+    ax_main.set_ylim(n_patients - 0.5, -0.5)
+
+    tick_fracs = [0.0, 0.25, 0.5, 0.75, 1.0]
+    tick_positions = [f * (n_bins - 1) for f in tick_fracs]
+    ax_main.set_xticks(tick_positions)
+    ax_main.set_xticklabels(["0", "0.25", "0.5", "0.75", "1.0"], fontsize=9)
+    ax_main.set_xlabel("Barycenter pseudotime", fontsize=10)
+    ax_main.set_ylabel("Patient", fontsize=10)
+
+    if ax_gene is None:
+        ax_main.set_title(
+            title or "Patient pseudotime bin → barycenter mapping (majority cell type)",
+            fontsize=11,
+        )
+
+    for y in np.arange(0.5, n_patients - 0.5):
+        ax_main.axhline(y, color="white", linewidth=0.3, alpha=0.6)
+
+    # ── legend ────────────────────────────────────────────────────────────────
+    from matplotlib.patches import Patch
+
+    legend_handles = [
+        Patch(facecolor=mcolors.to_rgba(cell_type_colors.get(ct, "#808080")), label=ct) for ct in sorted(used_celltypes)
+    ]
+    legend_handles.append(Patch(facecolor=tuple(uncovered_rgba), label="Uncovered (no cells)"))
+
+    ax_legend.legend(
+        handles=legend_handles,
+        loc="center",
+        ncol=min(len(legend_handles), 7),
+        frameon=False,
+        fontsize=8,
+    )
+
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
 
     return fig

@@ -18,12 +18,15 @@
 #   TUNE_SEED          default: 42
 #   PURITY_N_NEIGHBORS default: 50
 #   PURITY_SWEEP       default: 1 (set 0 to disable)
+#   GROUP_KEY          default: "" (omit group weighting)
 
 #SBATCH --job-name=scdebussy_real
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=256G
 #SBATCH --time=3-00:00:00
 #SBATCH --partition=cpu
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=wangm10@mskcc.org
 
 set -euo pipefail
 
@@ -58,6 +61,13 @@ PURITY_N_NEIGHBORS="${PURITY_N_NEIGHBORS:-50}"
 PURITY_SWEEP="${PURITY_SWEEP:-1}"
 METHOD_PARAMS="${METHOD_PARAMS:-}"
 SAVE_ADATA="${SAVE_ADATA:-0}"
+GROUP_KEY="${GROUP_KEY:-}"
+GENE_FILTER="${GENE_FILTER:-0}"
+INFORMATIVE_GENE_FILTER="${INFORMATIVE_GENE_FILTER:-0}"
+HVG_TOP_PER_PATIENT="${HVG_TOP_PER_PATIENT:-3000}"
+HVG_MIN_PATIENTS="${HVG_MIN_PATIENTS:-}"
+HVG_LAYER="${HVG_LAYER:-counts}"
+USE_SOFT_EM="${USE_SOFT_EM:-0}"
 
 cd "${REPO_ROOT}"
 export PYTHONPATH="${REPO_ROOT}:${REPO_ROOT}/src:${PYTHONPATH:-}"
@@ -90,8 +100,30 @@ if [[ "${SAVE_ADATA}" == "1" ]]; then
     CMD+=(--save-adata)
 fi
 
+if [[ -n "${GROUP_KEY}" ]]; then
+    CMD+=(--group-key "${GROUP_KEY}")
+fi
+
 if [[ -n "${METHOD_PARAMS}" ]]; then
     CMD+=(--method-params "${METHOD_PARAMS}")
+fi
+
+if [[ "${GENE_FILTER}" == "1" ]]; then
+    CMD+=(--gene-filter)
+fi
+
+if [[ "${INFORMATIVE_GENE_FILTER}" == "1" ]]; then
+    CMD+=(--informative-gene-filter)
+fi
+
+CMD+=(--hvg-top-per-patient "${HVG_TOP_PER_PATIENT}" --hvg-layer "${HVG_LAYER}")
+
+if [[ -n "${HVG_MIN_PATIENTS}" ]]; then
+    CMD+=(--hvg-min-patients "${HVG_MIN_PATIENTS}")
+fi
+
+if [[ "${USE_SOFT_EM}" == "1" ]]; then
+    CMD+=(--use-soft-em)
 fi
 
 "${CMD[@]}"

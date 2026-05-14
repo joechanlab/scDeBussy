@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from dtw import dtw
+from scipy.special import logsumexp as _logsumexp
 from sklearn.isotonic import IsotonicRegression
 from tslearn.barycenters import softdtw_barycenter
 
@@ -12,17 +13,22 @@ def smooth_patient_trajectory(
     pseudotime_key="s_local",
     n_bins=100,
     bandwidth=0.1,
+    method="llr",
+    adaptive_bandwidth=False,
+    knn_k=10,
 ):
     """
-    Smooth expression data for a single patient along local pseudotime using Gaussian kernel regression
+    Smooth expression data for a single patient along local pseudotime.
 
     Extracts and smooths expression data for a single patient along local
-    pseudotime s_{p,i}.
+    pseudotime s_{p,i} using either Nadaraya-Watson kernel regression (``"nw"``)
+    or local linear regression (``"llr"``).  Local linear regression eliminates
+    boundary bias at tau=0 and tau=1 and returns the slope coefficient as a
+    free byproduct, enabling more accurate endpoint estimates.
 
     Parameters
     ----------
     adata : AnnData
-
         Annotated data matrix containing all patients.
     patient_id : str
         Patient identifier used to subset adata.
@@ -33,7 +39,19 @@ def smooth_patient_trajectory(
     n_bins : int
         Number of pseudotime bins for the interpolation grid tau.
     bandwidth : float
-        Gaussian kernel bandwidth for expression smoothing.
+        Gaussian kernel bandwidth.  When ``adaptive_bandwidth=True`` this
+        acts as a minimum floor for the per-bin bandwidth.
+    method : str
+        Interpolation method.  ``"nw"`` for Nadaraya-Watson (degree-0 local
+        polynomial); ``"llr"`` for local linear regression (degree-1), which
+        is asymptotically unbiased at the boundaries.  Default ``"llr"``.
+    adaptive_bandwidth : bool
+        When ``True``, replace the global bandwidth with a per-bin balloon
+        estimator: h_t = distance to the knn_k-th nearest cell pseudotime
+        from tau_t, floored at ``bandwidth``.  Default ``False``.
+    knn_k : int
+        Number of nearest neighbours used when ``adaptive_bandwidth=True``.
+        Default 10.
 
     Returns
     -------
@@ -41,8 +59,13 @@ def smooth_patient_trajectory(
         Smoothed expression matrix along pseudotime grid.
     density : torch.Tensor, shape (n_bins,)
         Kernel weight sums per bin, used for downstream density diagnostics.
+    x_variance : torch.Tensor, shape (n_bins, n_genes)
+        Weighted residual variance per bin per gene.  Captures per-bin
+        uncertainty for downstream uncertainty-weighted alignment.
     """
-    # Subset and sort cells by local pseudotime s_{p,i}
+    if method not in {"nw", "llr"}:
+        raise ValueError(f"method must be 'nw' or 'llr', got {method!r}.")
+
     p_data = adata[adata.obs[patient_key] == patient_id]
     if p_data.n_obs == 0:
         raise ValueError(f"No cells found for patient_id={patient_id!r}.")
@@ -57,21 +80,53 @@ def smooth_patient_trajectory(
     if np.any(~np.isfinite(s_local)):
         raise ValueError(f"Non-finite pseudotime values found for patient_id={patient_id!r}.")
 
-    # Uniform pseudotime grid tau in [0, 1]
     tau_grid = np.linspace(0, 1, n_bins)
-    sq_dist = (tau_grid[:, None] - s_local[None, :]) ** 2
+    centered_s = s_local[None, :] - tau_grid[:, None]  # (T, N_p)
+    sq_dist = centered_s**2
 
-    # 1. Compute Gaussian kernel weights (unnormalized = density proxy)
-    weights = np.exp(-sq_dist / (2 * bandwidth**2))
-    density = weights.sum(axis=1, keepdims=True)
+    if adaptive_bandwidth:
+        k_idx = min(knn_k - 1, x_raw.shape[0] - 1)
+        h_t = np.maximum(np.sort(np.abs(centered_s), axis=1)[:, k_idx], bandwidth)
+        weights = np.exp(-sq_dist / (2 * h_t[:, None] ** 2))
+    else:
+        weights = np.exp(-sq_dist / (2 * bandwidth**2))
 
-    # 2. Normalize weights and compute smoothed expression
-    weights_norm = weights / (density + 1e-8)
-    x_smoothed = weights_norm @ x_raw
+    density = weights.sum(axis=1, keepdims=True)  # (T, 1)
+    weights_norm = weights / (density + 1e-8)  # (T, N_p)
+
+    if method == "nw":
+        x_smoothed = weights_norm @ x_raw  # (T, G)
+        x_variance = weights_norm @ (x_raw**2) - x_smoothed**2  # (T, G)
+
+    else:  # llr
+        # Local linear regression: fit intercept + slope at each grid point.
+        # Z[t] = [1, s_i - tau_t] — design matrix (T, N_p, 2)
+        Z = np.stack([np.ones_like(centered_s), centered_s], axis=2)
+        WZ = weights[:, :, None] * Z  # (T, N_p, 2)
+        ZtWZ = np.einsum("tni,tnj->tij", WZ, Z) + 1e-8 * np.eye(2)  # (T, 2, 2)
+        ZtWX = np.einsum("tni,ng->tig", WZ, x_raw)  # (T, 2, G)
+        beta = np.linalg.solve(ZtWZ, ZtWX)  # (T, 2, G)
+        x_smoothed = beta[:, 0, :]  # (T, G) intercept
+
+        # Weighted residual variance via algebraic expansion of E_w[r^2]:
+        # r_{t,i,g} = X_ig - beta_0[t,g] - beta_1[t,g]*(s_i - tau_t)
+        b0 = beta[:, 0, :]  # (T, G)
+        b1 = beta[:, 1, :]  # (T, G)
+        E_w_X2 = weights_norm @ (x_raw**2)  # (T, G)
+        E_w_X = weights_norm @ x_raw  # (T, G)
+        E_w_Xc = (weights_norm * centered_s) @ x_raw  # (T, G)
+        E_w_c = (weights_norm * centered_s).sum(axis=1)  # (T,)
+        E_w_c2 = (weights_norm * centered_s**2).sum(axis=1)  # (T,)
+        x_variance = (
+            E_w_X2 - 2 * b0 * E_w_X - 2 * b1 * E_w_Xc + b0**2 + 2 * b0 * b1 * E_w_c[:, None] + b1**2 * E_w_c2[:, None]
+        )
+
+    x_variance = np.maximum(x_variance, 0.0)  # guard against tiny negative values from floating point
 
     return (
         torch.tensor(x_smoothed, dtype=torch.float32),
         torch.tensor(density.flatten(), dtype=torch.float32),
+        torch.tensor(x_variance, dtype=torch.float32),
     )
 
 
@@ -213,6 +268,9 @@ def _fit_barycenter_from_trajectories(
     barycenter = softdtw_barycenter(
         X=patient_trajectories, gamma=gamma, max_iter=barycenter_init_iter, weights=patient_weights
     )
+
+    _window_size = max(1, int(dtw_window_fraction * n_bins))
+
     prev_cost = float("inf")
     warp_paths = []
     iteration_costs: list[float] = []
@@ -226,25 +284,26 @@ def _fit_barycenter_from_trajectories(
         coverage_this_iter: list[dict] = []
 
         for trajectory in patient_trajectories:
+            traj_arr = np.asarray(trajectory)
             alignment = dtw(
-                x=barycenter,
-                y=trajectory,
+                x=traj_arr,
+                y=barycenter,
                 dist_method=dtw_dist_method,
                 step_pattern=dtw_step_pattern,
                 open_begin=dtw_open_begin,
                 open_end=dtw_open_end,
                 window_type="sakoechiba",
-                window_args={"window_size": max(1, int(dtw_window_fraction * n_bins))},
+                window_args={"window_size": _window_size},
             )
+            pat_start = int(alignment.index1.min())
+            pat_end = int(alignment.index1.max())
+            bary_start = int(alignment.index2.min())
+            bary_end = int(alignment.index2.max())
+            warp_path = list(zip(alignment.index1, alignment.index2, strict=False))
 
             total_cost += alignment.distance
-            warp_path = list(zip(alignment.index1, alignment.index2, strict=False))
             warp_paths.append(warp_path)
 
-            bary_start = int(alignment.index1.min())
-            bary_end = int(alignment.index1.max())
-            pat_start = int(alignment.index2.min())
-            pat_end = int(alignment.index2.max())
             coverage_this_iter.append(
                 {"bary_start": bary_start, "bary_end": bary_end, "pat_start": pat_start, "pat_end": pat_end}
             )
@@ -300,6 +359,248 @@ def _fit_barycenter_from_trajectories(
     return barycenter, warp_paths, diagnostics
 
 
+def _compute_distance_matrix(A: np.ndarray, B: np.ndarray, dist_method: str) -> np.ndarray:
+    """Compute T×T pairwise distance matrix between rows of A (T,K) and B (T,K)."""
+    if dist_method in {"sqeuclidean", "euclidean"}:
+        A_sq = (A**2).sum(axis=1)
+        B_sq = (B**2).sum(axis=1)
+        D = np.maximum(A_sq[:, None] + B_sq[None, :] - 2.0 * (A @ B.T), 0.0)
+        return D if dist_method == "sqeuclidean" else np.sqrt(D)
+    elif dist_method == "cosine":
+        A_n = A / (np.linalg.norm(A, axis=1, keepdims=True) + 1e-8)
+        B_n = B / (np.linalg.norm(B, axis=1, keepdims=True) + 1e-8)
+        return np.maximum(1.0 - A_n @ B_n.T, 0.0)
+    elif dist_method == "cityblock":
+        return np.abs(A[:, None, :] - B[None, :, :]).sum(axis=2)
+    else:
+        raise ValueError(f"Unknown dist_method: {dist_method!r}")
+
+
+def _forward_backward_open(
+    delta: np.ndarray, gamma: float, window_size: int, bary_min: int = 0, bary_max: int | None = None
+) -> tuple:
+    """Expected alignment matrix for asymmetric open-ended soft-DTW.
+
+    Transitions: (1,0) patient advances / barycenter stays; (1,1) both advance.
+    Open begin: path may start at any barycenter bin when t=0.
+    Open end: path may terminate at any barycenter bin when t=T-1.
+    Every patient bin is visited exactly once, so rows of A_bar sum to 1.
+
+    Parameters
+    ----------
+    delta : (T, T) pairwise distance matrix Delta[t, t'] = d(X_p(t), B(t')).
+    gamma : soft-DTW temperature parameter.
+    window_size : Sakoe-Chiba half-width in bins.
+
+    Returns
+    -------
+    A_bar : (T, T) expected alignment matrix; A_bar[t, t'] = P((t,t') on path).
+    log_Z : float, log partition function.
+    """
+    T = delta.shape[0]
+    if bary_max is None:
+        bary_max = T - 1
+
+    # Log-probability of visiting each cell; mask out-of-band cells
+    log_p = -delta / gamma
+    t_idx = np.arange(T)
+    out_of_band = np.abs(t_idx[:, None] - t_idx[None, :]) > window_size
+    log_p[out_of_band] = -np.inf
+
+    # Per-patient barycenter window: mask columns outside [bary_min, bary_max]
+    if bary_min > 0:
+        log_p[:, :bary_min] = -np.inf
+    if bary_max < T - 1:
+        log_p[:, bary_max + 1 :] = -np.inf
+
+    # --- Forward pass ---
+    log_alpha = np.full((T, T), -np.inf)
+    log_alpha[0] = log_p[0]  # open begin: all barycenter start positions valid
+
+    for t in range(1, T):
+        from_vert = log_alpha[t - 1]  # (1,0): from (t-1, t')
+        from_diag = np.empty(T)
+        from_diag[0] = -np.inf
+        from_diag[1:] = log_alpha[t - 1, :-1]  # (1,1): from (t-1, t'-1)
+        log_alpha[t] = log_p[t] + np.logaddexp(from_vert, from_diag)
+
+    # Partition function: sum over all terminal barycenter positions (open end)
+    terminal = log_alpha[T - 1]
+    finite = terminal[np.isfinite(terminal)]
+    if finite.size == 0:
+        return np.zeros((T, T)), float(-np.inf)
+    log_Z = float(_logsumexp(finite))
+
+    # --- Backward pass ---
+    log_beta = np.full((T, T), -np.inf)
+    log_beta[T - 1] = 0.0  # open end: all terminal positions weight 1
+    log_beta[T - 1, out_of_band[T - 1]] = -np.inf
+
+    for t in range(T - 2, -1, -1):
+        # Successor (1,0): (t, t') -> (t+1, t')
+        to_vert = log_beta[t + 1] + log_p[t + 1]
+        # Successor (1,1): (t, t') -> (t+1, t'+1)
+        to_diag = np.empty(T)
+        to_diag[T - 1] = -np.inf
+        to_diag[:-1] = log_beta[t + 1, 1:] + log_p[t + 1, 1:]
+        log_beta[t] = np.logaddexp(to_vert, to_diag)
+
+    # Expected alignment matrix A_bar[t,t'] = alpha[t,t'] * beta[t,t'] / Z
+    log_A = log_alpha + log_beta - log_Z
+    A_bar = np.exp(np.clip(log_A, -500.0, 0.0))
+    A_bar[out_of_band] = 0.0
+    return A_bar, log_Z
+
+
+def _fit_barycenter_soft_em(
+    patient_trajectories,
+    n_bins,
+    gamma,
+    max_iter,
+    tol,
+    verbose,
+    dtw_dist_method,
+    dtw_window_fraction,
+    dtw_open_begin,
+    dtw_open_end,
+    barycenter_init_iter,
+    barycenter_update_iter,
+    patient_weights=None,
+    iteration_callback=None,
+):
+    """Proper soft-EM for DTW barycenter alignment.
+
+    E-step: compute expected alignment matrix A_bar_p via forward-backward on the
+    open-ended DTW lattice (replaces hard Viterbi path).
+    M-step: soft-warp each patient trajectory into barycenter space via A_bar_p,
+    then run softdtw_barycenter on the warped trajectories.  This restores the
+    optimization power of softdtw_barycenter while keeping probabilistic E-step
+    assignments, and avoids the coverage-collapse at open-end extremes that the
+    plain closed-form average suffers from.
+    The objective -sum_p w_p log Z_p is guaranteed non-increasing each iteration.
+    """
+    T = n_bins
+    window_size = max(1, int(dtw_window_fraction * T))
+    P = len(patient_trajectories)
+
+    if patient_weights is None:
+        patient_weights = np.ones(P) / P
+
+    # Initialise barycenter with a few soft-DTW barycenter iterations
+    B = softdtw_barycenter(X=patient_trajectories, gamma=gamma, max_iter=barycenter_init_iter, weights=patient_weights)
+
+    prev_cost = float("inf")
+    iteration_costs: list[float] = []
+    converged = False
+    coverage_per_iteration: list[list[dict]] = []
+
+    for iteration in range(max_iter):
+        # E-step: expected alignment matrices
+        alignment_matrices = []
+        total_neg_log_Z = 0.0
+
+        for p, traj in enumerate(patient_trajectories):
+            delta = _compute_distance_matrix(traj, B, dtw_dist_method)
+            A_bar, log_Z = _forward_backward_open(delta, gamma, window_size)
+            alignment_matrices.append(A_bar)
+            total_neg_log_Z -= float(patient_weights[p]) * log_Z
+
+        iteration_costs.append(float(total_neg_log_Z))
+
+        # Coverage diagnostics from marginal distributions
+        coverage_this_iter: list[dict] = []
+        for A_bar in alignment_matrices:
+            bary_marg = A_bar.sum(axis=0)
+            pat_marg = A_bar.sum(axis=1)
+            cb = np.where(bary_marg > 1e-6)[0]
+            cp = np.where(pat_marg > 1e-6)[0]
+            coverage_this_iter.append(
+                {
+                    "bary_start": int(cb[0]) if cb.size else 0,
+                    "bary_end": int(cb[-1]) if cb.size else T - 1,
+                    "pat_start": int(cp[0]) if cp.size else 0,
+                    "pat_end": int(cp[-1]) if cp.size else T - 1,
+                }
+            )
+        coverage_per_iteration.append(coverage_this_iter)
+
+        if iteration_callback is not None:
+            # Approximate warp paths from argmax of each row for the callback
+            approx_paths = [
+                list(zip(range(T), A_bar.argmax(axis=1).tolist(), strict=False)) for A_bar in alignment_matrices
+            ]
+            try:
+                iteration_callback(
+                    iteration=int(iteration + 1),
+                    total_cost=total_neg_log_Z,
+                    warp_paths=approx_paths,
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
+        if verbose:
+            print(f"Iter {iteration + 1:02d} | -log Z: {total_neg_log_Z:.4f}")
+
+        if abs(prev_cost - total_neg_log_Z) < tol:
+            converged = True
+            if verbose:
+                print("Convergence reached.")
+            break
+        prev_cost = total_neg_log_Z
+
+        # M-step: soft-warp each patient into barycenter space via A_bar, then run
+        # softdtw_barycenter on the warped trajectories.  Per-row normalisation by
+        # A_bar column sums prevents coverage collapse at open-end extremes.
+        soft_aligned = []
+        for traj, A_bar in zip(patient_trajectories, alignment_matrices, strict=False):
+            warped = A_bar.T @ traj  # (T, K)
+            row_sums = A_bar.sum(axis=0)[:, None] + 1e-8  # (T, 1)
+            soft_aligned.append(warped / row_sums)
+        B = softdtw_barycenter(
+            X=soft_aligned,
+            gamma=gamma,
+            max_iter=barycenter_update_iter,
+            init=B,
+            weights=patient_weights,
+        )
+
+    # Final warp paths via hard DTW against converged B (used for cell mapping).
+    warp_paths = []
+    final_coverage: list[dict] = []
+    for traj in patient_trajectories:
+        traj_arr = np.asarray(traj)
+        alignment = dtw(
+            x=traj_arr,
+            y=B,
+            dist_method=dtw_dist_method,
+            step_pattern="asymmetric",
+            open_begin=dtw_open_begin,
+            open_end=dtw_open_end,
+            window_type="sakoechiba",
+            window_args={"window_size": window_size},
+        )
+        warp_paths.append(list(zip(alignment.index1, alignment.index2, strict=False)))
+        final_coverage.append(
+            {
+                "bary_start": int(alignment.index2.min()),
+                "bary_end": int(alignment.index2.max()),
+                "pat_start": int(alignment.index1.min()),
+                "pat_end": int(alignment.index1.max()),
+            }
+        )
+
+    diagnostics = {
+        "iteration_costs": iteration_costs,
+        "final_iteration": int(len(iteration_costs)),
+        "converged": bool(converged),
+        "final_cost": float(iteration_costs[-1]) if iteration_costs else None,
+        "tolerance": float(tol),
+        "max_iterations": int(max_iter),
+        "coverage": final_coverage,
+    }
+    return B, warp_paths, diagnostics
+
+
 def _warp_path_to_grid_mapping(warp_path, n_bins):
     patient_tau = np.linspace(0, 1, n_bins)
     barycenter_tau = np.linspace(0, 1, n_bins)
@@ -307,8 +608,9 @@ def _warp_path_to_grid_mapping(warp_path, n_bins):
         return patient_tau, patient_tau
 
     path = np.asarray(warp_path, dtype=int)
-    bary_indices = path[:, 0]
-    patient_indices = path[:, 1]
+    # Column 0 = patient (index1/x), column 1 = barycenter (index2/y).
+    patient_indices = path[:, 0]
+    bary_indices = path[:, 1]
 
     unique_patient_indices = np.unique(patient_indices)
     mapped_bary_indices = np.array(
@@ -399,6 +701,11 @@ def scDeBussy(
     group_key=None,
     rmse_truth_key="tau_global",
     log_iteration_rmse_if_available=True,
+    gene_subset_key=None,
+    method="llr",
+    adaptive_bandwidth=False,
+    knn_k=10,
+    use_soft_em=False,
 ):
     """
     Align per-patient pseudotime trajectories onto a shared barycenter.
@@ -452,6 +759,32 @@ def scDeBussy(
     log_iteration_rmse_if_available : bool
         Whether to compute and record per-iteration RMSE to ``rmse_truth_key``
         during EM iterations when the truth key is present.
+    gene_subset_key : str or None
+        Column in ``adata.var`` whose boolean values indicate which genes to use
+        for trajectory smoothing and DTW alignment.  When ``None`` all genes are
+        used.  Intended for use with :func:`filter_recurrent_hvgs` (key
+        ``"recurrent_hvg"``) or :func:`filter_informative_genes` (key
+        ``"informative_gene"``).  All genes remain accessible in ``adata``
+        regardless of this selection.
+    method : str
+        Interpolation method passed to :func:`smooth_patient_trajectory`.
+        ``"llr"`` (local linear regression, default) eliminates boundary bias
+        at tau=0 and tau=1.  ``"nw"`` uses the legacy Nadaraya-Watson estimator.
+    adaptive_bandwidth : bool
+        When ``True``, use a per-bin balloon bandwidth based on the knn_k-th
+        nearest cell pseudotime.  Default ``False``.
+    knn_k : int
+        Number of nearest neighbours for the balloon bandwidth estimator.
+        Only used when ``adaptive_bandwidth=True``.  Default 10.
+    use_soft_em : bool
+        When ``True``, replace the hard-Viterbi E-step with a proper soft E-step
+        that computes the expected alignment matrix via the forward-backward
+        algorithm on the open-ended DTW lattice, and replaces the soft-DTW
+        barycenter M-step with a closed-form weighted average.  This makes the
+        algorithm a proper EM with a guaranteed non-increasing objective
+        ``-sum_p w_p log Z_p`` each iteration, and correctly handles the
+        open-begin/open-end assumption in the M-step without padding heuristics.
+        Default ``False`` (retains legacy behaviour).
 
     Returns
     -------
@@ -459,6 +792,16 @@ def scDeBussy(
         The same ``adata`` object with aligned results written in place.
     """
     patient_ids = _validate_alignment_inputs(adata, patient_key, pseudotime_key, n_bins, bandwidth)
+
+    # Restrict trajectory computation to a gene subset when requested.
+    adata_for_trajectories = adata
+    if gene_subset_key is not None:
+        if gene_subset_key not in adata.var.columns:
+            raise ValueError(f"gene_subset_key={gene_subset_key!r} not found in adata.var.")
+        gene_mask = adata.var[gene_subset_key].astype(bool).values
+        if not np.any(gene_mask):
+            raise ValueError(f"gene_subset_key={gene_subset_key!r} selects zero genes.")
+        adata_for_trajectories = adata[:, gene_mask]
     _validate_advanced_alignment_inputs(
         dtw_dist_method=dtw_dist_method,
         dtw_step_pattern=dtw_step_pattern,
@@ -469,19 +812,31 @@ def scDeBussy(
         barycenter_update_iter=barycenter_update_iter,
     )
 
+    if method not in {"nw", "llr"}:
+        raise ValueError(f"method must be 'nw' or 'llr', got {method!r}.")
+    if not isinstance(adaptive_bandwidth, (bool, np.bool_)):
+        raise ValueError("adaptive_bandwidth must be a boolean.")
+    if int(knn_k) < 1:
+        raise ValueError("knn_k must be at least 1.")
+
     patient_trajectories = []
     patient_densities = {}
+    patient_variances = {}
     for patient_id in patient_ids:
-        smoothed, density = smooth_patient_trajectory(
-            adata,
+        smoothed, density, variance = smooth_patient_trajectory(
+            adata_for_trajectories,
             patient_id=patient_id,
             patient_key=patient_key,
             pseudotime_key=pseudotime_key,
             n_bins=n_bins,
             bandwidth=bandwidth,
+            method=method,
+            adaptive_bandwidth=adaptive_bandwidth,
+            knn_k=knn_k,
         )
         patient_trajectories.append(smoothed.detach().cpu().numpy())
         patient_densities[str(patient_id)] = density.detach().cpu().numpy()
+        patient_variances[str(patient_id)] = variance.detach().cpu().numpy()
 
     # Compute inverse-frequency weights by group to counteract sample imbalance.
     patient_weights = None
@@ -532,23 +887,41 @@ def scDeBussy(
 
         iteration_callback = _iteration_callback
 
-    barycenter, warp_paths, em_convergence = _fit_barycenter_from_trajectories(
-        patient_trajectories=patient_trajectories,
-        n_bins=n_bins,
-        gamma=gamma,
-        max_iter=max_iter,
-        tol=tol,
-        verbose=verbose,
-        dtw_dist_method=dtw_dist_method,
-        dtw_step_pattern=dtw_step_pattern,
-        dtw_open_begin=dtw_open_begin,
-        dtw_open_end=dtw_open_end,
-        dtw_window_fraction=dtw_window_fraction,
-        barycenter_init_iter=barycenter_init_iter,
-        barycenter_update_iter=barycenter_update_iter,
-        patient_weights=patient_weights,
-        iteration_callback=iteration_callback,
-    )
+    if use_soft_em:
+        barycenter, warp_paths, em_convergence = _fit_barycenter_soft_em(
+            patient_trajectories=patient_trajectories,
+            n_bins=n_bins,
+            gamma=gamma,
+            max_iter=max_iter,
+            tol=tol,
+            verbose=verbose,
+            dtw_dist_method=dtw_dist_method,
+            dtw_window_fraction=dtw_window_fraction,
+            dtw_open_begin=dtw_open_begin,
+            dtw_open_end=dtw_open_end,
+            barycenter_init_iter=barycenter_init_iter,
+            barycenter_update_iter=barycenter_update_iter,
+            patient_weights=patient_weights,
+            iteration_callback=iteration_callback,
+        )
+    else:
+        barycenter, warp_paths, em_convergence = _fit_barycenter_from_trajectories(
+            patient_trajectories=patient_trajectories,
+            n_bins=n_bins,
+            gamma=gamma,
+            max_iter=max_iter,
+            tol=tol,
+            verbose=verbose,
+            dtw_dist_method=dtw_dist_method,
+            dtw_step_pattern=dtw_step_pattern,
+            dtw_open_begin=dtw_open_begin,
+            dtw_open_end=dtw_open_end,
+            dtw_window_fraction=dtw_window_fraction,
+            barycenter_init_iter=barycenter_init_iter,
+            barycenter_update_iter=barycenter_update_iter,
+            patient_weights=patient_weights,
+            iteration_callback=iteration_callback,
+        )
 
     adata.obs[key_added] = _map_cells_to_aligned_pseudotime(
         adata,
@@ -588,13 +961,19 @@ def scDeBussy(
         "aligned_pseudotime": np.linspace(0, 1, n_bins),
         "expression": barycenter,
         "patient_ids": list(patient_ids),
-        "warp_paths": [[(int(i), int(j)) for i, j in warp_path] for warp_path in warp_paths],
+        "warp_paths": {
+            str(pid): np.array([(int(i), int(j)) for i, j in warp_path], dtype=np.int32)
+            for pid, warp_path in zip(patient_ids, warp_paths, strict=False)
+        },
         "patient_densities": patient_densities,
+        "patient_variances": patient_variances,
         "coverage": coverage_summary,
         "em_convergence": em_convergence,
         "params": {
             "patient_key": patient_key,
             "pseudotime_key": pseudotime_key,
+            "genes_used": list(adata_for_trajectories.var_names.astype(str)),
+            "gene_subset_key": gene_subset_key,
             "n_bins": n_bins,
             "bandwidth": bandwidth,
             "gamma": gamma,
@@ -611,6 +990,10 @@ def scDeBussy(
             "group_key": group_key,
             "patient_weights": patient_weights.tolist() if patient_weights is not None else None,
             "group_assignments": group_assignments,
+            "method": method,
+            "adaptive_bandwidth": adaptive_bandwidth,
+            "knn_k": int(knn_k),
+            "use_soft_em": bool(use_soft_em),
         },
     }
 
