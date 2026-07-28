@@ -21,3 +21,7 @@ __pycache__/
 /docs/_build/
 
 _legacy/
+
+# local caches / scratch outputs
+.pybiomart.sqlite
+scripts/temp/

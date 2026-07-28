@@ -136,6 +136,7 @@ def plot_running_enrichment_ridge(
     smooth_window: int = 10,
     overlap: float = 0.5,
     short_names=None,
+    fill_colors=None,
     save_path=None,
 ):
     """Plot stacked ridge plots of running gene-set enrichment along ordered genes.
@@ -170,6 +171,9 @@ def plot_running_enrichment_ridge(
     short_names : list of str, optional
         Short display names for each gene set (same order as
         ``gene_sets_to_plot``).  Defaults to cleaned versions of the set names.
+    fill_colors : sequence, optional
+        Ridge fill colors in the same order as ``gene_sets_to_plot``.  When
+        ``None``, colors are sampled from ``viridis``.
     save_path : str or None, optional
         File path to save the figure.  Defaults to ``None`` (no save).
 
@@ -242,7 +246,12 @@ def plot_running_enrichment_ridge(
                 )
 
     # ── ridge plots ──────────────────────────────────────────────────────────
-    fill_colors = plt.cm.viridis(np.linspace(0, 0.8, n_sets))
+    if fill_colors is None:
+        fill_colors = plt.cm.viridis(np.linspace(0, 0.8, n_sets))
+    else:
+        fill_colors = list(fill_colors)
+        if len(fill_colors) != n_sets:
+            raise ValueError("fill_colors must have the same length as gene_sets_to_plot")
 
     for i, (ax_r, gs_name) in enumerate(zip(ridge_axes, gene_sets_to_plot, strict=False)):
         subset = enrichment_df[enrichment_df["gene_set"] == gs_name].sort_values("position")

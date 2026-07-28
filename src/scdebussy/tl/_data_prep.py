@@ -67,7 +67,7 @@ def filter_informative_genes(
         protein_coding_set = set(protein_coding.astype(str))
         biotype_keep = pd.Series(gene_names.isin(protein_coding_set), index=gene_names)
         annotation_source = "ensembl_protein_coding_plus_regex"
-    except (ImportError, AttributeError, KeyError, OSError, TypeError, ValueError) as exc:
+    except Exception as exc:
         print(f"Gene annotation lookup failed; falling back to regex-only informative filter: {exc}")
 
     keep_mask = np.asarray(biotype_keep, dtype=bool) & (~regex_exclude)
