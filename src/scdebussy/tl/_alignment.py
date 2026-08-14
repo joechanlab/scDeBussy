@@ -3,7 +3,9 @@ import torch
 from dtw import dtw
 from scipy.ndimage import gaussian_filter1d as _gaussian_filter1d
 from scipy.special import logsumexp as _logsumexp
+from scipy.stats import rankdata as _rankdata
 from sklearn.isotonic import IsotonicRegression
+from sklearn.neighbors import NearestNeighbors as _NearestNeighbors
 from tslearn.barycenters import softdtw_barycenter
 
 
@@ -17,6 +19,9 @@ def smooth_patient_trajectory(
     method="llr",
     adaptive_bandwidth=False,
     knn_k=10,
+    density_correction=False,
+    density_correction_key=None,
+    density_knn_k=15,
 ):
     """
     Smooth expression data for a single patient along local pseudotime.
@@ -53,6 +58,25 @@ def smooth_patient_trajectory(
     knn_k : int
         Number of nearest neighbours used when ``adaptive_bandwidth=True``.
         Default 10.
+    density_correction : bool
+        When ``True``, downweight each cell by its local density in
+        ``adata.obsm[density_correction_key]`` before the kernel regression,
+        so a locally dense sub-population (e.g. a large, homogeneous cell
+        state) doesn't dominate the smoothed trajectory over a locally sparse
+        one purely by cell count. Without this, at any pseudotime bin where
+        two sub-populations of very different abundance overlap, the smoothed
+        value is pulled toward whichever is more numerous there -- not
+        necessarily whichever is more representative of that pseudotime
+        point. This is a label-free correction: it uses local geometry in the
+        given embedding, not any cell-type annotation. Default ``False``
+        (retains legacy behaviour).
+    density_correction_key : str or None
+        Key into ``adata.obsm`` holding the embedding (e.g. a diffusion map or
+        PCA) used to estimate each cell's local density. Required when
+        ``density_correction=True``.
+    density_knn_k : int
+        Number of nearest neighbours used for the local density estimate.
+        Default 15.
 
     Returns
     -------
@@ -66,6 +90,8 @@ def smooth_patient_trajectory(
     """
     if method not in {"nw", "llr"}:
         raise ValueError(f"method must be 'nw' or 'llr', got {method!r}.")
+    if density_correction and density_correction_key is None:
+        raise ValueError("density_correction_key must be set when density_correction=True.")
 
     p_data = adata[adata.obs[patient_key] == patient_id]
     if p_data.n_obs == 0:
@@ -81,6 +107,41 @@ def smooth_patient_trajectory(
     if np.any(~np.isfinite(s_local)):
         raise ValueError(f"Non-finite pseudotime values found for patient_id={patient_id!r}.")
 
+    inv_density_weight = None
+    if density_correction:
+        if density_correction_key not in p_data.obsm:
+            raise ValueError(f"density_correction_key={density_correction_key!r} not found in adata.obsm.")
+        embedding = np.asarray(p_data.obsm[density_correction_key], dtype=float)
+        # Drop columns that are entirely NaN for this patient: concatenating
+        # patients whose embeddings have different widths (e.g. per-patient
+        # diffusion maps computed with different n_components) via
+        # `sc.concat(..., join="outer")` pads narrower patients' obsm with
+        # NaN columns up to the widest patient's width. That's a
+        # concatenation artefact, not missing data, so drop only fully-NaN
+        # columns; any remaining (partial) NaNs are a genuine data problem
+        # and should still raise.
+        all_nan_cols = np.all(np.isnan(embedding), axis=0)
+        if all_nan_cols.any():
+            embedding = embedding[:, ~all_nan_cols]
+        if np.any(np.isnan(embedding)):
+            raise ValueError(
+                f"adata.obsm[{density_correction_key!r}] contains NaN values for "
+                f"patient_id={patient_id!r} that aren't explained by mismatched "
+                "embedding widths across patients (all-NaN columns are dropped "
+                "automatically, but partial missingness is not)."
+            )
+        k = min(density_knn_k, embedding.shape[0] - 1)
+        if k < 1:
+            raise ValueError(f"Not enough cells for patient_id={patient_id!r} to estimate local density.")
+        nn = _NearestNeighbors(n_neighbors=k + 1).fit(embedding)
+        knn_dist, _ = nn.kneighbors(embedding)
+        # Rank-based inverse-density weight in (0, 1]: sparser cells (larger
+        # distance to their k-th neighbour) get a higher weight. Rank-based
+        # rather than a raw 1/distance^dim power law, which blows up
+        # numerically over many orders of magnitude in high-dimensional
+        # embeddings (distances raised to e.g. the 10th power).
+        inv_density_weight = _rankdata(knn_dist[:, -1]) / knn_dist.shape[0]
+
     tau_grid = np.linspace(0, 1, n_bins)
     centered_s = s_local[None, :] - tau_grid[:, None]  # (T, N_p)
     sq_dist = centered_s**2
@@ -91,6 +152,9 @@ def smooth_patient_trajectory(
         weights = np.exp(-sq_dist / (2 * h_t[:, None] ** 2))
     else:
         weights = np.exp(-sq_dist / (2 * bandwidth**2))
+
+    if inv_density_weight is not None:
+        weights = weights * inv_density_weight[None, :]
 
     density = weights.sum(axis=1, keepdims=True)  # (T, 1)
     weights_norm = weights / (density + 1e-8)  # (T, N_p)
@@ -778,6 +842,9 @@ def scDeBussy(
     adaptive_bandwidth=False,
     knn_k=10,
     use_soft_em=False,
+    density_correction=False,
+    density_correction_key=None,
+    density_knn_k=15,
 ):
     """
     Align per-patient pseudotime trajectories onto a shared barycenter.
@@ -857,6 +924,20 @@ def scDeBussy(
         ``-sum_p w_p log Z_p`` each iteration, and correctly handles the
         open-begin/open-end assumption in the M-step without padding heuristics.
         Default ``False`` (retains legacy behaviour).
+    density_correction : bool
+        When ``True``, downweight cells by their local density in
+        ``adata.obsm[density_correction_key]`` during per-patient trajectory
+        smoothing (see :func:`smooth_patient_trajectory`), so a locally dense
+        sub-population doesn't dominate the smoothed trajectory over a
+        locally sparse one purely by cell count. Label-free: uses embedding
+        geometry, not any cell-type annotation. Default ``False``.
+    density_correction_key : str or None
+        Key into ``adata.obsm`` holding the embedding (e.g. a diffusion map
+        or PCA) used to estimate local density. Required when
+        ``density_correction=True``.
+    density_knn_k : int
+        Number of nearest neighbours used for the local density estimate.
+        Default 15.
 
     Returns
     -------
@@ -890,6 +971,8 @@ def scDeBussy(
         raise ValueError("adaptive_bandwidth must be a boolean.")
     if int(knn_k) < 1:
         raise ValueError("knn_k must be at least 1.")
+    if density_correction and density_correction_key is None:
+        raise ValueError("density_correction_key must be set when density_correction=True.")
 
     patient_trajectories = []
     patient_densities = {}
@@ -905,6 +988,9 @@ def scDeBussy(
             method=method,
             adaptive_bandwidth=adaptive_bandwidth,
             knn_k=knn_k,
+            density_correction=density_correction,
+            density_correction_key=density_correction_key,
+            density_knn_k=density_knn_k,
         )
         patient_trajectories.append(smoothed.detach().cpu().numpy())
         patient_densities[str(patient_id)] = density.detach().cpu().numpy()
@@ -1063,6 +1149,9 @@ def scDeBussy(
             "adaptive_bandwidth": adaptive_bandwidth,
             "knn_k": int(knn_k),
             "use_soft_em": bool(use_soft_em),
+            "density_correction": bool(density_correction),
+            "density_correction_key": density_correction_key,
+            "density_knn_k": int(density_knn_k),
         },
     }
 

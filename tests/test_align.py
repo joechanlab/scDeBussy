@@ -293,6 +293,175 @@ def test_smooth_patient_trajectory_returns_expected_shapes(sample_adata):
     assert np.all(variance.numpy() >= 0)
 
 
+def test_density_correction_requires_a_key(sample_adata):
+    with pytest.raises(ValueError, match="density_correction_key"):
+        smooth_patient_trajectory(
+            sample_adata,
+            patient_id="patient1",
+            patient_key="patient",
+            pseudotime_key="s_local",
+            n_bins=8,
+            bandwidth=0.1,
+            density_correction=True,
+        )
+
+
+def test_density_correction_missing_obsm_key_raises(sample_adata):
+    with pytest.raises(ValueError, match="not found in adata.obsm"):
+        smooth_patient_trajectory(
+            sample_adata,
+            patient_id="patient1",
+            patient_key="patient",
+            pseudotime_key="s_local",
+            n_bins=8,
+            bandwidth=0.1,
+            density_correction=True,
+            density_correction_key="X_pca",
+        )
+
+
+def test_density_correction_changes_result_under_imbalanced_density(sample_adata):
+    """With a clumped embedding (most cells crowded together, a few sparse
+    outliers), density correction should measurably change the smoothed
+    trajectory relative to the uncorrected version -- otherwise the
+    weighting isn't doing anything.
+    """
+    rng = np.random.default_rng(0)
+    n = sample_adata.n_obs
+    # First half of patient1's cells tightly clustered (dense); rest spread out.
+    embedding = rng.normal(scale=0.01, size=(n, 2))
+    embedding[n // 2 :] += rng.normal(scale=5.0, size=(n - n // 2, 2))
+    sample_adata.obsm["X_pca"] = embedding
+
+    kwargs = {
+        "patient_id": "patient1",
+        "patient_key": "patient",
+        "pseudotime_key": "s_local",
+        "n_bins": 8,
+        "bandwidth": 0.1,
+        "density_knn_k": 2,
+    }
+    smoothed_std, _, _ = smooth_patient_trajectory(sample_adata, **kwargs)
+    smoothed_dc, _, _ = smooth_patient_trajectory(
+        sample_adata, density_correction=True, density_correction_key="X_pca", **kwargs
+    )
+
+    assert not np.allclose(smoothed_std.numpy(), smoothed_dc.numpy())
+
+
+def test_density_correction_ignores_all_nan_columns_from_outer_join(sample_adata):
+    """Concatenating patients whose embeddings have different widths via
+    sc.concat(..., join="outer") pads narrower patients with all-NaN columns
+    up to the widest patient's width -- this must be tolerated (treated as
+    padding, not missing data), not crash NearestNeighbors.
+    """
+    rng = np.random.default_rng(0)
+    n = sample_adata.n_obs
+    n_patient1 = (sample_adata.obs["patient"] == "patient1").sum()
+    embedding = np.full((n, 4), np.nan)
+    embedding[:n_patient1, :2] = rng.normal(size=(n_patient1, 2))  # patient1: only 2 real components
+    embedding[n_patient1:, :] = rng.normal(size=(n - n_patient1, 4))  # patient2: all 4 real
+    sample_adata.obsm["X_pca"] = embedding
+
+    smoothed, _, _ = smooth_patient_trajectory(
+        sample_adata,
+        patient_id="patient1",
+        patient_key="patient",
+        pseudotime_key="s_local",
+        n_bins=8,
+        bandwidth=0.1,
+        density_correction=True,
+        density_correction_key="X_pca",
+        density_knn_k=2,
+    )
+    assert np.all(np.isfinite(smoothed.numpy()))
+
+
+def test_density_correction_raises_on_genuine_partial_nan(sample_adata):
+    """Partial (non-column-wide) NaNs are a real data problem, not outer-join
+    padding, and must still raise rather than be silently dropped."""
+    rng = np.random.default_rng(0)
+    n = sample_adata.n_obs
+    embedding = rng.normal(size=(n, 2))
+    embedding[0, 0] = np.nan  # one cell missing one (not all) coordinates
+    sample_adata.obsm["X_pca"] = embedding
+
+    with pytest.raises(ValueError, match="contains NaN"):
+        smooth_patient_trajectory(
+            sample_adata,
+            patient_id="patient1",
+            patient_key="patient",
+            pseudotime_key="s_local",
+            n_bins=8,
+            bandwidth=0.1,
+            density_correction=True,
+            density_correction_key="X_pca",
+            density_knn_k=2,
+        )
+
+
+def test_scDeBussy_density_correction_runs_and_stores_params(sample_adata):
+    rng = np.random.default_rng(0)
+    sample_adata.obsm["X_pca"] = rng.normal(size=(sample_adata.n_obs, 2))
+
+    result = scDeBussy(
+        sample_adata,
+        patient_key="patient",
+        pseudotime_key="s_local",
+        n_bins=12,
+        bandwidth=0.15,
+        max_iter=3,
+        density_correction=True,
+        density_correction_key="X_pca",
+        density_knn_k=3,
+    )
+
+    assert result.obs["aligned_pseudotime"].notna().all()
+    params = result.uns["barycenter"]["params"]
+    assert params["density_correction"] is True
+    assert params["density_correction_key"] == "X_pca"
+    assert params["density_knn_k"] == 3
+
+
+def test_scDeBussy_density_correction_requires_a_key(sample_adata):
+    with pytest.raises(ValueError, match="density_correction_key"):
+        scDeBussy(
+            sample_adata,
+            patient_key="patient",
+            pseudotime_key="s_local",
+            n_bins=12,
+            bandwidth=0.15,
+            max_iter=3,
+            density_correction=True,
+        )
+
+
+def test_scDeBussy_density_correction_off_by_default_matches_legacy(sample_adata):
+    """density_correction=False (the default) must reproduce the exact same
+    result as before this feature existed -- no accidental behaviour change
+    for callers who don't opt in."""
+    import copy
+
+    adata_a = copy.deepcopy(sample_adata)
+    adata_b = copy.deepcopy(sample_adata)
+
+    scDeBussy(adata_a, patient_key="patient", pseudotime_key="s_local", n_bins=12, bandwidth=0.15, max_iter=2)
+    scDeBussy(
+        adata_b,
+        patient_key="patient",
+        pseudotime_key="s_local",
+        n_bins=12,
+        bandwidth=0.15,
+        max_iter=2,
+        density_correction=False,
+    )
+    np.testing.assert_allclose(
+        adata_a.obs["aligned_pseudotime"].values,
+        adata_b.obs["aligned_pseudotime"].values,
+        atol=1e-6,
+    )
+
+
 def test_compare_methods_excludes_pairwise_only_from_single_axis_ranking():
     import pandas as pd
 
