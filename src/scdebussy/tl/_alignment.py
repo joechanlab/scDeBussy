@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import torch
 from dtw import dtw
@@ -329,12 +331,24 @@ def _fit_barycenter_from_trajectories(
     barycenter_update_iter,
     patient_weights=None,
     iteration_callback=None,
+    init_barycenter=None,
 ):
-    barycenter = softdtw_barycenter(
-        X=patient_trajectories, gamma=gamma, max_iter=barycenter_init_iter, weights=patient_weights
-    )
+    if init_barycenter is not None:
+        barycenter = np.asarray(init_barycenter, dtype=float)
+    else:
+        barycenter = softdtw_barycenter(
+            X=patient_trajectories, gamma=gamma, max_iter=barycenter_init_iter, weights=patient_weights
+        )
 
-    _window_size = max(1, int(dtw_window_fraction * n_bins))
+    # With open-begin AND open-end, a patient covering only a small fraction of the
+    # barycenter needs many (1,0) stay-steps, pushing late patient bins far off the
+    # diagonal (e.g. patient bin 99 → bary bin 12 = 87 off-diagonal).  A narrow band
+    # would block this, forcing every patient to span the full barycenter.  Use the
+    # full range so partial patients are unconstrained in which bary region they occupy.
+    if dtw_open_begin and dtw_open_end:
+        _window_size = n_bins - 1
+    else:
+        _window_size = max(1, int(dtw_window_fraction * n_bins))
 
     prev_cost = float("inf")
     warp_paths = []
@@ -408,6 +422,10 @@ def _fit_barycenter_from_trajectories(
             init=barycenter,
             weights=patient_weights,
         )
+
+    # Smooth the converged barycenter to remove sharp coverage-boundary artefacts
+    # at the transitions between patients with different cell-type compositions.
+    barycenter = _gaussian_filter1d(barycenter, sigma=2, axis=0)
 
     # Summarise final-iteration coverage per patient
     final_coverage = coverage_per_iteration[-1] if coverage_per_iteration else []
@@ -564,6 +582,24 @@ def _forward_backward_open(
     return A_bar, log_Z
 
 
+def _density_row_weights(density, cap: float = 5.0):
+    """Row cost multipliers rho[t] and the LLR advance mask from a bin density vector.
+
+    Returns ``(row_weights, advance_mask)``, or ``(None, None)`` when the density
+    vector carries no usable signal.  ``row_weights`` is B-independent and constant
+    across EM iterations, so scaling the pairwise cost by it defines a valid
+    (reweighted) objective -- provided the M-step uses the same weights.
+    """
+    d = np.asarray(density, dtype=float)
+    pos_d = d[d > 1e-6]
+    if pos_d.size == 0:
+        return None, None
+    ref_d = float(np.median(pos_d))
+    row_weights = np.clip(ref_d / (d + 1e-8), 1.0, cap)
+    advance_mask = d >= (d.max() * 0.05)
+    return row_weights, advance_mask
+
+
 def _fit_barycenter_soft_em(
     patient_trajectories,
     n_bins,
@@ -576,83 +612,134 @@ def _fit_barycenter_soft_em(
     patient_weights=None,
     iteration_callback=None,
     patient_densities=None,
+    init_barycenter=None,
+    strict=False,
+    final_smoothing_sigma=2.0,
 ):
-    """Proper soft-EM for DTW barycenter alignment.
+    """Soft-EM for DTW barycenter alignment.
 
-    E-step: compute expected alignment matrix A_bar_p via forward-backward on the
-    open-ended DTW lattice (replaces hard Viterbi path).  No Sakoe-Chiba band is used:
-    the band would force partial patients to advance into barycenter regions they don't
-    cover, pulling LUAD cells into the SCLC region.  Without the band the path can stay
-    at the coverage boundary via (1,0) steps, which is the correct open-end behaviour.
+    E-step: expected alignment matrix A_bar_p via forward-backward on the open-ended
+    DTW lattice (replaces hard Viterbi).  Every lattice step advances the patient index
+    t by exactly 1, so each path visits exactly one barycenter bin per t and rows of
+    A_bar sum to 1 -- which makes A_bar an exact marginal occupancy.
 
-    When patient_densities is provided, each row of the distance matrix is scaled by
-    (median_density / bin_density), capped at 5×.  This inflates the cost for LLR-
-    extrapolated bins (low kernel-density, no real cells), causing the path to collapse
-    them onto a single barycenter position via (1,0) stay-steps rather than advancing
-    through intermediate barycenter regions that the patient never actually traversed.
-    Patients with missing middle segments (e.g. LUAD+SCLC-N without SCLC-A) therefore
-    skip the SCLC-A barycenter region instead of mapping their interpolated expression
-    into it.
+    M-step: coverage-weighted average.  Bins with negligible total coverage retain the
+    previous B value; because the M-step objective is separable over barycenter bins,
+    this partial coordinate-wise minimisation still cannot increase the objective.
 
-    M-step: direct coverage-weighted average — B[t'] = sum_p w_p A_bar_p[:,t'] X_p
-    divided by sum_p w_p A_bar_p[:,t'].sum().  Bins not covered by any patient retain
-    the previous B value rather than being pulled toward zero.  A Gaussian smoothing
-    pass (sigma=2 bins) removes sharp coverage-boundary artefacts.
-    The objective -sum_p w_p log Z_p is guaranteed non-increasing each iteration.
+    Descent guarantee
+    -----------------
+    With ``L(B) = -sum_p w_p log Z_p(B)``, the EM/MM (Jensen) bound gives
+
+        -log Z_p(B) <= -log Z_p(B^k) + (1/gamma) ( E_q[Delta_B] - E_q[Delta_{B^k}] )
+
+    so ``L`` is non-increasing provided the M-step does not increase
+
+        Q(B) = sum_p w_p sum_{t,t'} A_p[t,t'] d( X_p(t), B(t') )                    (dagger)
+
+    using the *same* cost ``d`` the E-step used.  This holds only under the following
+    conditions, which ``strict=True`` enforces:
+
+    * ``dtw_dist_method="sqeuclidean"``.  The arithmetic mean is the exact argmin of
+      (dagger) only for squared Euclidean cost.  For ``euclidean`` the minimiser is a
+      weighted geometric median, for ``cityblock`` a per-gene weighted median, and for
+      ``cosine`` the objective is scale-invariant in ``B[t']`` so the mean need not lie
+      in the argmin set at all.
+    * Density row weights, when used, are applied to the M-step accumulation as well as
+      to the E-step cost.  Otherwise the M-step minimises a different functional from
+      the one ``L`` tracks.
+    * No post-loop Gaussian smoothing of the returned barycenter.  Smoothing is a linear
+      operator with no variational derivation; ``L(S B^K) >= L(B^K)`` in general, so the
+      recorded cost sequence would describe a barycenter other than the one returned.
+
+    In strict mode a final E-step is run at the returned barycenter, so the last entry
+    of ``iteration_costs`` and the returned ``warp_paths`` both refer to the returned
+    ``B``.
+
+    ``strict=False`` reproduces the legacy behaviour exactly (cosine cost, density
+    weights in the E-step only, sigma=2 final smoothing) and carries **no** descent
+    guarantee.
     """
     T = n_bins
     P = len(patient_trajectories)
-    # Half-length window: large enough that a patient at bin t can stay at any
-    # barycenter bin within T//2 steps (so partial patients covering [0, T//2] can
-    # always hold position at their coverage boundary via (1,0) stay-steps).
-    fb_window = max(T // 2, 1)
+    # Full-range window: a patient covering only fraction f of the barycenter needs
+    # to stay at their coverage boundary for (1-f)*T patient bins, so the off-diagonal
+    # distance is up to (1-f)*T.  T-1 is the only correct choice for open-ended
+    # partial alignment.
+    fb_window = T - 1
+
+    if strict and dtw_dist_method != "sqeuclidean":
+        raise ValueError(
+            "strict soft-EM requires dtw_dist_method='sqeuclidean' (the arithmetic-mean "
+            f"M-step is the exact minimiser only for squared Euclidean cost); got {dtw_dist_method!r}."
+        )
 
     if patient_weights is None:
         patient_weights = np.ones(P) / P
 
-    # Initialise barycenter with a few soft-DTW barycenter iterations
-    B = softdtw_barycenter(X=patient_trajectories, gamma=gamma, max_iter=barycenter_init_iter, weights=patient_weights)
+    # Precompute the B-independent, iteration-constant density row weights once.
+    row_weights_per_patient: list[np.ndarray | None] = [None] * P
+    advance_masks: list[np.ndarray | None] = [None] * P
+    if patient_densities is not None:
+        for p in range(P):
+            row_weights_per_patient[p], advance_masks[p] = _density_row_weights(patient_densities[p])
 
-    prev_cost = float("inf")
-    iteration_costs: list[float] = []
-    converged = False
-    coverage_per_iteration: list[list[dict]] = []
+    # Initialise barycenter
+    if init_barycenter is not None:
+        B = np.asarray(init_barycenter, dtype=float)
+    else:
+        B = softdtw_barycenter(
+            X=patient_trajectories, gamma=gamma, max_iter=barycenter_init_iter, weights=patient_weights
+        )
 
-    for iteration in range(max_iter):
-        # E-step: expected alignment matrices
-        alignment_matrices = []
-        total_neg_log_Z = 0.0
-
+    def _e_step(B_cur):
+        """Return (alignment_matrices, total_neg_log_Z) at the given barycenter."""
+        mats = []
+        total = 0.0
         for p, traj in enumerate(patient_trajectories):
-            delta = _compute_distance_matrix(traj, B, dtw_dist_method)
-            advance_mask = None
-            if patient_densities is not None:
-                d = np.asarray(patient_densities[p], dtype=float)
-                pos_d = d[d > 1e-6]
-                if pos_d.size > 0:
-                    ref_d = float(np.median(pos_d))
-                    # Inflate cost rows by (ref / density), capped at 5×, to penalise
-                    # LLR-extrapolated bins that are far from real cells.
-                    row_weights = np.clip(ref_d / (d + 1e-8), 1.0, 5.0)
-                    delta = delta * row_weights[:, None]
-                    # Hard constraint: bins below 5% of peak density are LLR-only.
-                    # Block (1,1)/(1,2)/(1,3) advance steps so the path cannot
-                    # gallop through barycenter regions no real cells ever occupied.
-                    advance_mask = d >= (d.max() * 0.05)
-            A_bar, log_Z = _forward_backward_open(delta, gamma, fb_window, advance_mask=advance_mask)
-            alignment_matrices.append(A_bar)
-            total_neg_log_Z -= float(patient_weights[p]) * log_Z
+            delta = _compute_distance_matrix(traj, B_cur, dtw_dist_method)
+            rw = row_weights_per_patient[p]
+            if rw is not None:
+                delta = delta * rw[:, None]
+            A_bar, log_Z = _forward_backward_open(delta, gamma, fb_window, advance_mask=advance_masks[p])
+            mats.append(A_bar)
+            total -= float(patient_weights[p]) * log_Z
+        return mats, float(total)
 
-        iteration_costs.append(float(total_neg_log_Z))
+    def _m_step(mats, B_cur):
+        """Coordinate-wise minimiser of (dagger) over covered barycenter bins."""
+        K = B_cur.shape[1]
+        numerator = np.zeros((T, K))
+        denominator = np.zeros(T)
+        for p, (traj, A_bar) in enumerate(zip(patient_trajectories, mats, strict=False)):
+            w = float(patient_weights[p])
+            # In strict mode the M-step must weight by the same density-scaled cost the
+            # E-step used, otherwise it minimises a different functional than L tracks.
+            W = A_bar
+            rw = row_weights_per_patient[p] if strict else None
+            if rw is not None:
+                W = A_bar * rw[:, None]
+            numerator += w * (W.T @ np.asarray(traj))
+            denominator += w * W.sum(axis=0)
+        covered = denominator > (1.0 / (P * T))
+        if strict:
+            # Masked exact divide: adding an epsilon to the denominator shrinks the
+            # minimiser and can violate descent by O(eps * P * T * ||B||^2).
+            B_new = np.array(B_cur, dtype=float, copy=True)
+            idx = np.flatnonzero(covered)
+            if idx.size:
+                B_new[idx] = numerator[idx] / denominator[idx, None]
+            return B_new
+        return np.where(covered[:, None], numerator / (denominator[:, None] + 1e-8), B_cur)
 
-        # Coverage diagnostics from marginal distributions
-        coverage_this_iter: list[dict] = []
-        for A_bar in alignment_matrices:
+    def _coverage_from(mats, threshold):
+        out: list[dict] = []
+        for A_bar in mats:
             bary_marg = A_bar.sum(axis=0)
             pat_marg = A_bar.sum(axis=1)
-            cb = np.where(bary_marg > 1e-6)[0]
-            cp = np.where(pat_marg > 1e-6)[0]
-            coverage_this_iter.append(
+            cb = np.where(bary_marg > threshold)[0]
+            cp = np.where(pat_marg > threshold)[0]
+            out.append(
                 {
                     "bary_start": int(cb[0]) if cb.size else 0,
                     "bary_end": int(cb[-1]) if cb.size else T - 1,
@@ -660,10 +747,20 @@ def _fit_barycenter_soft_em(
                     "pat_end": int(cp[-1]) if cp.size else T - 1,
                 }
             )
-        coverage_per_iteration.append(coverage_this_iter)
+        return out
+
+    prev_cost = float("inf")
+    iteration_costs: list[float] = []
+    converged = False
+    coverage_per_iteration: list[list[dict]] = []
+    alignment_matrices: list[np.ndarray] = []
+
+    for iteration in range(max_iter):
+        alignment_matrices, total_neg_log_Z = _e_step(B)
+        iteration_costs.append(total_neg_log_Z)
+        coverage_per_iteration.append(_coverage_from(alignment_matrices, 1e-6))
 
         if iteration_callback is not None:
-            # Approximate warp paths from argmax of each row for the callback
             approx_paths = [
                 list(zip(range(T), A_bar.argmax(axis=1).tolist(), strict=False)) for A_bar in alignment_matrices
             ]
@@ -686,44 +783,43 @@ def _fit_barycenter_soft_em(
             break
         prev_cost = total_neg_log_Z
 
-        # M-step: direct coverage-weighted average.
-        # B[t'] = (sum_p w_p * A_bar_p[:, t'].T @ X_p) / (sum_p w_p * A_bar_p[:, t'].sum())
-        # Bins where total weighted coverage is negligible retain the previous B value
-        # so that uncovered patients don't drag those bins toward zero expression.
-        K = B.shape[1]
-        numerator = np.zeros((T, K))
-        denominator = np.zeros(T)
-        for p, (traj, A_bar) in enumerate(zip(patient_trajectories, alignment_matrices, strict=False)):
-            w = float(patient_weights[p])
-            numerator += w * (A_bar.T @ np.asarray(traj))
-            denominator += w * A_bar.sum(axis=0)
-        covered = denominator > (1.0 / (P * T))
-        B = np.where(covered[:, None], numerator / (denominator[:, None] + 1e-8), B)
+        B = _m_step(alignment_matrices, B)
 
-    # Smooth the converged barycenter to remove sharp coverage-boundary artefacts.
-    B = _gaussian_filter1d(B, sigma=2, axis=0)
+    if strict:
+        # The loop may exit via max_iter right after an M-step, leaving the recorded
+        # costs and A_bar one barycenter behind the returned B.  One extra E-step makes
+        # the returned expression, warp paths and final cost mutually consistent.
+        if not converged:
+            alignment_matrices, final_cost = _e_step(B)
+            iteration_costs.append(final_cost)
+            coverage_per_iteration.append(_coverage_from(alignment_matrices, 1e-6))
+    else:
+        # Legacy: smooth the converged barycenter to remove coverage-boundary artefacts.
+        # NOTE this invalidates the descent claim -- the returned B is not the B whose
+        # cost was recorded, and warp_paths below come from the unsmoothed barycenter.
+        if final_smoothing_sigma and final_smoothing_sigma > 0:
+            B = _gaussian_filter1d(B, sigma=final_smoothing_sigma, axis=0)
 
     # Derive warp paths from the last E-step A_bar.  Use the expected barycenter bin
-    # (weighted mean over t') rather than argmax: it's smoother, approximately monotone,
-    # and avoids discrete jumps from ties or diffuse probability near coverage boundaries.
+    # (weighted mean over t') rather than argmax: A_bar[t,:]/rowsum is exactly the
+    # marginal law of t'(t), every admissible path is non-decreasing in t', and a
+    # convex combination of non-decreasing functions is non-decreasing -- so the
+    # rounded posterior mean is monotone by construction.
     coverage_threshold = 1.0 / (P * T)
     warp_paths = []
-    final_coverage: list[dict] = []
     for A_bar in alignment_matrices:
         row_sums = A_bar.sum(axis=1) + 1e-8
         expected_bary = (A_bar * np.arange(T)[None, :]).sum(axis=1) / row_sums
         bary_bins = np.clip(np.round(expected_bary).astype(int), 0, T - 1).tolist()
         warp_paths.append(list(zip(range(T), bary_bins, strict=False)))
-        bary_marg = A_bar.sum(axis=0)
-        covered_cols = np.where(bary_marg > coverage_threshold)[0]
-        final_coverage.append(
-            {
-                "bary_start": int(covered_cols[0]) if covered_cols.size else 0,
-                "bary_end": int(covered_cols[-1]) if covered_cols.size else T - 1,
-                "pat_start": 0,
-                "pat_end": T - 1,
-            }
-        )
+    final_coverage = _coverage_from(alignment_matrices, coverage_threshold)
+    for cov in final_coverage:
+        cov["pat_start"] = 0
+        cov["pat_end"] = T - 1
+
+    # Fraction of barycenter bins each patient's posterior actually occupies -- the
+    # honest signal for "this patient shares little with the consensus".
+    coverage_fractions = [float((A_bar.sum(axis=0) > coverage_threshold).mean()) for A_bar in alignment_matrices]
 
     diagnostics = {
         "iteration_costs": iteration_costs,
@@ -733,6 +829,9 @@ def _fit_barycenter_soft_em(
         "tolerance": float(tol),
         "max_iterations": int(max_iter),
         "coverage": final_coverage,
+        "coverage_fractions": coverage_fractions,
+        "strict": bool(strict),
+        "monotone_costs": bool(all(b <= a + 1e-9 for a, b in zip(iteration_costs, iteration_costs[1:], strict=False))),
     }
     return B, warp_paths, diagnostics
 
@@ -842,6 +941,8 @@ def scDeBussy(
     adaptive_bandwidth=False,
     knn_k=10,
     use_soft_em=False,
+    strict_em=False,
+    arc_length_init_fraction=0.0,
     density_correction=False,
     density_correction_key=None,
     density_knn_k=15,
@@ -919,11 +1020,42 @@ def scDeBussy(
         When ``True``, replace the hard-Viterbi E-step with a proper soft E-step
         that computes the expected alignment matrix via the forward-backward
         algorithm on the open-ended DTW lattice, and replaces the soft-DTW
-        barycenter M-step with a closed-form weighted average.  This makes the
-        algorithm a proper EM with a guaranteed non-increasing objective
-        ``-sum_p w_p log Z_p`` each iteration, and correctly handles the
-        open-begin/open-end assumption in the M-step without padding heuristics.
-        Default ``False`` (retains legacy behaviour).
+        barycenter M-step with a closed-form weighted average, and correctly
+        handles the open-begin/open-end assumption in the M-step without padding
+        heuristics.  Note that this alone does **not** guarantee a monotonically
+        decreasing objective -- see ``strict_em``.  Default ``False`` (retains
+        legacy behaviour).
+    strict_em : bool
+        Only meaningful with ``use_soft_em=True``.  When ``True``, run the variant
+        of soft-EM whose M-step provably minimises the same expected cost the
+        E-step used, so the objective ``-sum_p w_p log Z_p`` is non-increasing at
+        every iteration by the EM/MM (Jensen) bound.  This requires three changes
+        relative to the legacy soft-EM path:
+
+        * the cost is forced to ``sqeuclidean`` (the arithmetic-mean M-step is the
+          exact minimiser only for squared Euclidean cost; ``dtw_dist_method`` is
+          overridden with a warning if set to anything else),
+        * density row weights are applied to the M-step accumulation as well as the
+          E-step cost, so both optimise the same functional, and
+        * the post-loop Gaussian smoothing of the barycenter is skipped, since it
+          is a linear operator with no variational derivation and would return a
+          barycenter other than the one whose cost was recorded.
+
+        Legacy soft-EM (``strict_em=False``) enables cosine cost, E-step-only
+        density weighting and sigma=2 final smoothing, none of which preserve the
+        descent bound.  Default ``False``.
+    arc_length_init_fraction : float
+        When greater than 0, only patients whose smoothed-trajectory arc length
+        (total L2 displacement across pseudotime bins) is at least
+        ``arc_length_init_fraction × max_arc_length`` are used to compute the
+        initial barycenter via ``softdtw_barycenter``.  Patients that traverse
+        a large region of gene-expression space (e.g. multi-cell-type patients)
+        tend to have longer arc lengths; using them alone for initialisation
+        produces a barycenter with clearer cell-state boundaries, preventing
+        single-cell-type patients from being incorrectly stretched across the
+        full consensus timeline during subsequent EM iterations.  Falls back
+        to all patients if fewer than 2 qualify.  Default ``0.0`` (all
+        patients, retains legacy behaviour).
     density_correction : bool
         When ``True``, downweight cells by their local density in
         ``adata.obsm[density_correction_key]`` during per-patient trajectory
@@ -973,6 +1105,17 @@ def scDeBussy(
         raise ValueError("knn_k must be at least 1.")
     if density_correction and density_correction_key is None:
         raise ValueError("density_correction_key must be set when density_correction=True.")
+    if strict_em and not use_soft_em:
+        raise ValueError("strict_em=True requires use_soft_em=True.")
+    if strict_em and dtw_dist_method != "sqeuclidean":
+        warnings.warn(
+            f"strict_em=True overrides dtw_dist_method={dtw_dist_method!r} with 'sqeuclidean': "
+            "the closed-form mean M-step is the exact minimiser of the E-step's expected "
+            "cost only for squared Euclidean distance.",
+            UserWarning,
+            stacklevel=2,
+        )
+        dtw_dist_method = "sqeuclidean"
 
     patient_trajectories = []
     patient_densities = {}
@@ -995,6 +1138,11 @@ def scDeBussy(
         patient_trajectories.append(smoothed.detach().cpu().numpy())
         patient_densities[str(patient_id)] = density.detach().cpu().numpy()
         patient_variances[str(patient_id)] = variance.detach().cpu().numpy()
+
+    # Compute trajectory arc lengths (total L2 displacement across pseudotime bins).
+    # Used to identify patients that traverse a large region of expression space.
+    traj_arrays = [np.asarray(t) for t in patient_trajectories]
+    arc_lengths = np.array([np.sum(np.linalg.norm(np.diff(t, axis=0), axis=1)) for t in traj_arrays])
 
     # Compute inverse-frequency weights by group to counteract sample imbalance.
     patient_weights = None
@@ -1045,6 +1193,25 @@ def scDeBussy(
 
         iteration_callback = _iteration_callback
 
+    # Optional: initialise barycenter from high-arc-length (complex) patients only.
+    # Standard softdtw_barycenter uses boundary-anchored warping, which stretches
+    # single-cell-type patients across the full barycenter and blurs cell-state
+    # boundaries.  Using only patients with long arc lengths (multi-state) produces
+    # a cleaner initial barycenter so single-cell-type patients align correctly.
+    init_barycenter = None
+    if arc_length_init_fraction > 0.0 and arc_lengths.max() > 0:
+        arc_threshold = arc_length_init_fraction * arc_lengths.max()
+        complex_mask = arc_lengths >= arc_threshold
+        if complex_mask.sum() >= 2:
+            complex_trajs = [t for t, m in zip(traj_arrays, complex_mask, strict=False) if m]
+            complex_weights = None
+            if patient_weights is not None:
+                cw = patient_weights[complex_mask]
+                complex_weights = cw / cw.sum()
+            init_barycenter = softdtw_barycenter(
+                X=complex_trajs, gamma=gamma, max_iter=barycenter_init_iter, weights=complex_weights
+            )
+
     if use_soft_em:
         barycenter, warp_paths, em_convergence = _fit_barycenter_soft_em(
             patient_trajectories=patient_trajectories,
@@ -1058,6 +1225,8 @@ def scDeBussy(
             patient_weights=patient_weights,
             iteration_callback=iteration_callback,
             patient_densities=[patient_densities[str(pid)] for pid in patient_ids],
+            init_barycenter=init_barycenter,
+            strict=strict_em,
         )
     else:
         barycenter, warp_paths, em_convergence = _fit_barycenter_from_trajectories(
@@ -1076,6 +1245,7 @@ def scDeBussy(
             barycenter_update_iter=barycenter_update_iter,
             patient_weights=patient_weights,
             iteration_callback=iteration_callback,
+            init_barycenter=init_barycenter,
         )
 
     adata.obs[key_added] = _map_cells_to_aligned_pseudotime(
@@ -1149,6 +1319,9 @@ def scDeBussy(
             "adaptive_bandwidth": adaptive_bandwidth,
             "knn_k": int(knn_k),
             "use_soft_em": bool(use_soft_em),
+            "strict_em": bool(strict_em),
+            "arc_length_init_fraction": float(arc_length_init_fraction),
+            "patient_arc_lengths": {str(pid): float(l) for pid, l in zip(patient_ids, arc_lengths, strict=False)},
             "density_correction": bool(density_correction),
             "density_correction_key": density_correction_key,
             "density_knn_k": int(density_knn_k),
