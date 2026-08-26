@@ -332,23 +332,26 @@ def _fit_barycenter_from_trajectories(
     patient_weights=None,
     iteration_callback=None,
     init_barycenter=None,
+    gamma_scaling="absolute",
 ):
+    gamma_init = gamma
+    if gamma_scaling == "relative":
+        # tslearn's soft-DTW is squared-Euclidean internally, so size its temperature
+        # against that scale rather than against dtw_dist_method's.
+        gamma_init = gamma * _pairwise_cost_scale(patient_trajectories, "sqeuclidean")
     if init_barycenter is not None:
         barycenter = np.asarray(init_barycenter, dtype=float)
     else:
         barycenter = softdtw_barycenter(
-            X=patient_trajectories, gamma=gamma, max_iter=barycenter_init_iter, weights=patient_weights
+            X=patient_trajectories, gamma=gamma_init, max_iter=barycenter_init_iter, weights=patient_weights
         )
 
-    # With open-begin AND open-end, a patient covering only a small fraction of the
-    # barycenter needs many (1,0) stay-steps, pushing late patient bins far off the
-    # diagonal (e.g. patient bin 99 → bary bin 12 = 87 off-diagonal).  A narrow band
-    # would block this, forcing every patient to span the full barycenter.  Use the
-    # full range so partial patients are unconstrained in which bary region they occupy.
-    if dtw_open_begin and dtw_open_end:
-        _window_size = n_bins - 1
-    else:
-        _window_size = max(1, int(dtw_window_fraction * n_bins))
+    # The Sakoe-Chiba band is the only thing coupling patients to a shared region of the
+    # barycenter, so honour the caller's dtw_window_fraction even with open ends.
+    # Widening it to n_bins-1 when both ends are open lets each patient drift into its
+    # own cheapest window; measured on the 9-patient cohort that costs cross-patient
+    # k-NN purity 0.6706 -> 0.2130 even with the DTW argument order correct.
+    _window_size = max(1, int(dtw_window_fraction * n_bins))
 
     prev_cost = float("inf")
     warp_paths = []
@@ -364,9 +367,20 @@ def _fit_barycenter_from_trajectories(
 
         for trajectory in patient_trajectories:
             traj_arr = np.asarray(trajectory)
+            # NOTE: barycenter is the QUERY and the patient the REFERENCE.  dtw-python
+            # fully consumes the query and only partially matches the reference, so this
+            # order makes every patient span the whole barycenter.  Swapping it (as
+            # c9d7bed did) is semantically appealing -- it would let a patient occupy a
+            # sub-span -- but is under-constrained in practice: each patient settles into
+            # its own cheapest window and the windows do not stay mutually consistent.
+            # Measured on the 9-patient cohort, the swap drops cross-patient k-NN purity
+            # from 0.6706 to 0.2478.  Restoring a Sakoe-Chiba band widens the spans but
+            # does not restore purity (0.0922), so this is not a band-tuning issue.
+            # Partial coverage is handled properly by the soft-EM path instead, which
+            # models it natively via (1,0) stay-steps.
             alignment = dtw(
-                x=traj_arr,
-                y=barycenter,
+                x=barycenter,
+                y=traj_arr,
                 dist_method=dtw_dist_method,
                 step_pattern=dtw_step_pattern,
                 open_begin=dtw_open_begin,
@@ -374,11 +388,13 @@ def _fit_barycenter_from_trajectories(
                 window_type="sakoechiba",
                 window_args={"window_size": _window_size},
             )
-            pat_start = int(alignment.index1.min())
-            pat_end = int(alignment.index1.max())
-            bary_start = int(alignment.index2.min())
-            bary_end = int(alignment.index2.max())
-            warp_path = list(zip(alignment.index1, alignment.index2, strict=False))
+            bary_start = int(alignment.index1.min())
+            bary_end = int(alignment.index1.max())
+            pat_start = int(alignment.index2.min())
+            pat_end = int(alignment.index2.max())
+            # warp_path keeps the (patient-bin, barycenter-bin) convention that
+            # _warp_path_to_grid_mapping expects, independent of the DTW arg order.
+            warp_path = list(zip(alignment.index2, alignment.index1, strict=False))
 
             total_cost += alignment.distance
             warp_paths.append(warp_path)
@@ -417,7 +433,7 @@ def _fit_barycenter_from_trajectories(
 
         barycenter = softdtw_barycenter(
             X=padded_trajectories,
-            gamma=gamma,
+            gamma=gamma_init,
             max_iter=barycenter_update_iter,
             init=barycenter,
             weights=patient_weights,
@@ -457,6 +473,63 @@ def _compute_distance_matrix(A: np.ndarray, B: np.ndarray, dist_method: str) -> 
         return np.abs(A[:, None, :] - B[None, :, :]).sum(axis=2)
     else:
         raise ValueError(f"Unknown dist_method: {dist_method!r}")
+
+
+_MIN_COST_SCALE = 1e-6
+"""Below this a measured cost scale is treated as degenerate and ignored (scale 1.0)."""
+
+
+def _reference_cost_scale(trajectories, reference, dist_method: str) -> float:
+    """Median pairwise cost between each trajectory and a reference series.
+
+    ``gamma`` is a softmax temperature applied as ``exp(-Delta / gamma)``, so its
+    meaning depends entirely on the magnitude of ``Delta`` -- which varies by orders of
+    magnitude across metrics and with the number of genes.  Cosine costs are bounded in
+    [0, 2] and are typically O(0.1); squared Euclidean costs on a few thousand genes are
+    routinely O(100-1000).  A ``gamma`` tuned for one is a hard argmax (or a uniform
+    smear) for the other.  Dividing ``gamma`` through by this scale makes it comparable
+    across metrics and gene-set sizes.
+
+    Returns 1.0 when the scale is degenerate, so callers can multiply unconditionally.
+    """
+    scales = []
+    ref = np.asarray(reference, dtype=float)
+    for traj in trajectories:
+        d = _compute_distance_matrix(np.asarray(traj, dtype=float), ref, dist_method)
+        finite = d[np.isfinite(d)]
+        if finite.size:
+            scales.append(float(np.median(finite)))
+    if not scales:
+        return 1.0
+    scale = float(np.median(scales))
+    # Guard well above the 1e-8 epsilon in the cosine normalisation: identical rows
+    # yield ~1e-8 rather than exactly 0, and a scale that small would drive gamma_eff to
+    # zero and collapse the E-step to a hard argmax -- the exact failure this helper exists
+    # to prevent.
+    return scale if scale > _MIN_COST_SCALE else 1.0
+
+
+def _pairwise_cost_scale(trajectories, dist_method: str) -> float:
+    """Median cost between distinct patient trajectories.
+
+    Used where no barycenter exists yet (e.g. sizing the temperature for the tslearn
+    ``softdtw_barycenter`` initialisation, which always uses squared Euclidean
+    internally regardless of ``dtw_dist_method``).
+    """
+    trajs = [np.asarray(t, dtype=float) for t in trajectories]
+    if len(trajs) < 2:
+        return _reference_cost_scale(trajs, trajs[0], dist_method) if trajs else 1.0
+    scales = []
+    for i in range(len(trajs)):
+        for j in range(i + 1, len(trajs)):
+            d = _compute_distance_matrix(trajs[i], trajs[j], dist_method)
+            finite = d[np.isfinite(d)]
+            if finite.size:
+                scales.append(float(np.median(finite)))
+    if not scales:
+        return 1.0
+    scale = float(np.median(scales))
+    return scale if scale > _MIN_COST_SCALE else 1.0
 
 
 def _forward_backward_open(
@@ -615,6 +688,7 @@ def _fit_barycenter_soft_em(
     init_barycenter=None,
     strict=False,
     final_smoothing_sigma=2.0,
+    gamma_scaling="absolute",
 ):
     """Soft-EM for DTW barycenter alignment.
 
@@ -684,13 +758,26 @@ def _fit_barycenter_soft_em(
         for p in range(P):
             row_weights_per_patient[p], advance_masks[p] = _density_row_weights(patient_densities[p])
 
-    # Initialise barycenter
+    # Initialise barycenter.  tslearn's soft-DTW always uses squared Euclidean
+    # internally, so its temperature needs its own scale, independent of dtw_dist_method.
     if init_barycenter is not None:
         B = np.asarray(init_barycenter, dtype=float)
     else:
+        gamma_init = gamma
+        if gamma_scaling == "relative":
+            gamma_init = gamma * _pairwise_cost_scale(patient_trajectories, "sqeuclidean")
         B = softdtw_barycenter(
-            X=patient_trajectories, gamma=gamma, max_iter=barycenter_init_iter, weights=patient_weights
+            X=patient_trajectories, gamma=gamma_init, max_iter=barycenter_init_iter, weights=patient_weights
         )
+
+    # Resolve the E-step temperature ONCE, against the initial barycenter, and freeze it.
+    # gamma must not vary across iterations: L = -sum_p w_p log Z_p(B; gamma) is only
+    # comparable between iterations at constant gamma, so a per-iteration rescale would
+    # silently void the descent guarantee this function documents.
+    if gamma_scaling == "relative":
+        gamma_eff = gamma * _reference_cost_scale(patient_trajectories, B, dtw_dist_method)
+    else:
+        gamma_eff = float(gamma)
 
     def _e_step(B_cur):
         """Return (alignment_matrices, total_neg_log_Z) at the given barycenter."""
@@ -701,7 +788,7 @@ def _fit_barycenter_soft_em(
             rw = row_weights_per_patient[p]
             if rw is not None:
                 delta = delta * rw[:, None]
-            A_bar, log_Z = _forward_backward_open(delta, gamma, fb_window, advance_mask=advance_masks[p])
+            A_bar, log_Z = _forward_backward_open(delta, gamma_eff, fb_window, advance_mask=advance_masks[p])
             mats.append(A_bar)
             total -= float(patient_weights[p]) * log_Z
         return mats, float(total)
@@ -831,6 +918,9 @@ def _fit_barycenter_soft_em(
         "coverage": final_coverage,
         "coverage_fractions": coverage_fractions,
         "strict": bool(strict),
+        "gamma": float(gamma),
+        "gamma_scaling": str(gamma_scaling),
+        "gamma_effective": float(gamma_eff),
         "monotone_costs": bool(all(b <= a + 1e-9 for a, b in zip(iteration_costs, iteration_costs[1:], strict=False))),
     }
     return B, warp_paths, diagnostics
@@ -942,6 +1032,8 @@ def scDeBussy(
     knn_k=10,
     use_soft_em=False,
     strict_em=False,
+    soft_em_density_weighting=True,
+    gamma_scaling="absolute",
     arc_length_init_fraction=0.0,
     density_correction=False,
     density_correction_key=None,
@@ -1044,6 +1136,34 @@ def scDeBussy(
         Legacy soft-EM (``strict_em=False``) enables cosine cost, E-step-only
         density weighting and sigma=2 final smoothing, none of which preserve the
         descent bound.  Default ``False``.
+    soft_em_density_weighting : bool
+        Only used when ``use_soft_em=True``.  When ``True`` (default, legacy behaviour)
+        the pairwise cost rows are inflated by ``clip(median(d)/d, 1, 5)`` for
+        low-density (LLR-extrapolated) bins, and advance steps are blocked below 5% of
+        peak density.  Set ``False`` to disable both, which removes the row weights from
+        the objective entirely.  Combined with ``strict_em=True`` this gives the
+        simplest configuration with an exact descent guarantee -- the M-step mean is the
+        unweighted argmin of the E-step's expected squared error -- and avoids the
+        aggressive down-weighting of sparse bins that can collapse patient coverage on
+        cohorts with heterogeneous sampling density.
+    gamma_scaling : str
+        How ``gamma`` is interpreted.  ``gamma`` is a softmax temperature applied as
+        ``exp(-Delta / gamma)``, so its meaning depends on the magnitude of the pairwise
+        cost ``Delta`` -- which varies by orders of magnitude between metrics and with
+        the number of genes.  Cosine costs are O(0.1); squared Euclidean costs over a
+        few thousand genes are routinely O(100-1000).  A ``gamma`` tuned for one metric
+        is effectively a hard argmax for the other, which collapses the alignment.
+
+        ``"absolute"`` (default) uses ``gamma`` as given -- the legacy behaviour, so
+        existing results are unchanged.  ``"relative"`` multiplies ``gamma`` by the
+        median pairwise cost measured once at initialisation, making it comparable
+        across metrics and gene-set sizes.  The resolved value is reported as
+        ``gamma_effective`` in the barycenter diagnostics.
+
+        The effective gamma is computed once and held fixed for the whole run: the
+        objective ``-sum_p w_p log Z_p(B; gamma)`` is only comparable between iterations
+        at constant gamma, so rescaling per iteration would void the descent guarantee
+        described under ``strict_em``.
     arc_length_init_fraction : float
         When greater than 0, only patients whose smoothed-trajectory arc length
         (total L2 displacement across pseudotime bins) is at least
@@ -1105,6 +1225,8 @@ def scDeBussy(
         raise ValueError("knn_k must be at least 1.")
     if density_correction and density_correction_key is None:
         raise ValueError("density_correction_key must be set when density_correction=True.")
+    if gamma_scaling not in {"absolute", "relative"}:
+        raise ValueError(f"gamma_scaling must be 'absolute' or 'relative', got {gamma_scaling!r}.")
     if strict_em and not use_soft_em:
         raise ValueError("strict_em=True requires use_soft_em=True.")
     if strict_em and dtw_dist_method != "sqeuclidean":
@@ -1224,9 +1346,12 @@ def scDeBussy(
             barycenter_init_iter=barycenter_init_iter,
             patient_weights=patient_weights,
             iteration_callback=iteration_callback,
-            patient_densities=[patient_densities[str(pid)] for pid in patient_ids],
+            patient_densities=(
+                [patient_densities[str(pid)] for pid in patient_ids] if soft_em_density_weighting else None
+            ),
             init_barycenter=init_barycenter,
             strict=strict_em,
+            gamma_scaling=gamma_scaling,
         )
     else:
         barycenter, warp_paths, em_convergence = _fit_barycenter_from_trajectories(
@@ -1246,6 +1371,7 @@ def scDeBussy(
             patient_weights=patient_weights,
             iteration_callback=iteration_callback,
             init_barycenter=init_barycenter,
+            gamma_scaling=gamma_scaling,
         )
 
     adata.obs[key_added] = _map_cells_to_aligned_pseudotime(
@@ -1320,6 +1446,8 @@ def scDeBussy(
             "knn_k": int(knn_k),
             "use_soft_em": bool(use_soft_em),
             "strict_em": bool(strict_em),
+            "soft_em_density_weighting": bool(soft_em_density_weighting),
+            "gamma_scaling": str(gamma_scaling),
             "arc_length_init_fraction": float(arc_length_init_fraction),
             "patient_arc_lengths": {str(pid): float(l) for pid, l in zip(patient_ids, arc_lengths, strict=False)},
             "density_correction": bool(density_correction),
