@@ -1,0 +1,8 @@
+{
+  "suite": "null",
+  "cases": 300,
+  "passed": true,
+  "failures": [],
+  "release_gate": true,
+  "replacement_recommended": false
+}

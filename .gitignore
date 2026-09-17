@@ -23,3 +23,5 @@ __pycache__/
 _legacy/
 .pybiomart.sqlite
 scDeBussy.txt
+# Reproducible raw benchmark records; aggregate reports remain reviewable.
+validation/v2/*/*_[0-9][0-9][0-9][0-9].json

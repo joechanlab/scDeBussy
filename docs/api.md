@@ -1,15 +1,5 @@
 # API
 
-## Preprocessing
-
-```{eval-rst}
-.. module:: scdebussy.pp
-.. currentmodule:: scdebussy.pp
-
-.. autosummary::
-    :toctree: generated
-```
-
 ## Tools
 
 ```{eval-rst}
@@ -19,7 +9,10 @@
 .. autosummary::
     :toctree: generated
 
-    ._barycenter_align.align_pseudotime
+    scDeBussy
+    smooth_patient_trajectory
+    test_differential_trajectory
+    cross_batch_knn_purity
 ```
 
 ## Plotting
@@ -31,5 +24,28 @@
 .. autosummary::
     :toctree: generated
 
-    .plot.align_pseudotime
+    plot_gene_barycenter
+    plot_em_convergence
+```
+
+## Experimental linear v2
+
+See [the v2 guide](v2.md) for the model contract and scientific limitations.
+
+```{eval-rst}
+.. currentmodule:: scdebussy.align
+
+.. autosummary::
+    :toctree: generated
+
+    fit
+    project
+    summarize
+    compare
+    AlignmentResult
+    ProjectionResult
+    ComparisonResult
+    LatticeModel
+    infer
+    simulate
 ```

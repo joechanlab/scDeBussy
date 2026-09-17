@@ -1,0 +1,56 @@
+{
+  "baseline_commit": "a8de9c4d86fb620e2c08e21ee1edc67f29568c42",
+  "worktree": "/tmp/scdebussy-v2",
+  "branch": "refactor/v2",
+  "python": "3.11.13 | packaged by conda-forge | (main, Jun  4 2025, 14:48:23) [GCC 13.3.0]",
+  "executable": "/data1/chanj3/wangm10/conda_envs/scdebussy-py311/bin/python",
+  "platform": "Linux-4.18.0-553.125.1.el8_10.x86_64-x86_64-with-glibc2.28",
+  "packages": {
+    "numpy": "2.2.6",
+    "scipy": "1.16.3",
+    "numba": "0.61.2",
+    "anndata": "0.12.10",
+    "pandas": "2.3.3",
+    "h5py": "3.14.0",
+    "pytest": "9.0.2",
+    "torch": "2.11.0",
+    "tslearn": "0.8.1",
+    "dtw-python": "1.7.4"
+  },
+  "source_sha256": {
+    "src/scdebussy/align/__init__.py": "eb75c2d39506b2d427a49af7b7cb959acbd23d930695b7a51f17d35c94c8b4d5",
+    "src/scdebussy/align/_api.py": "1515ae0ccd47c76ce90fa4954bea52b998c94d3190d3783bf05321656a510caf",
+    "src/scdebussy/align/_barycenter.py": "22c259475217e78ed8e544ece568428dfac94df2ec7f1689e24df835a3a117e1",
+    "src/scdebussy/align/_compare.py": "2b0f765990ba9a85de644f93e5252f5aafd366b22fc7ef2cd845edc4338f4a25",
+    "src/scdebussy/align/_dp.py": "0ad77de3e45223c648fe43079055b2acf29e02eaed2abfc8702543ac2ca05592",
+    "src/scdebussy/align/_landmarks.py": "dbc377eb0029b6ef9de37b7f1575ad0c9617e996771fd80aa8249312b5dada81",
+    "src/scdebussy/align/_model.py": "e0e272bea435737413b7006f8b9cbc0b2f3889a849d5cf592b3caf8d031c1ec5",
+    "src/scdebussy/align/_project.py": "32f5ea5e820ff0c455fac144ddc856c7b1ad800eb65b07b63697da8899e8da54",
+    "src/scdebussy/align/_simulate.py": "71d2e3c6b92197d858315963494b56712df54a25567729a0e0bbf257306370b1",
+    "src/scdebussy/align/_types.py": "755087db49767d43d777123701150b7f3d9ce6a1c6d46d396061b040134f2b7a",
+    "tests/test_v2_api.py": "488be8b108e0dbbe413dfa5091faaecc542ecea6f6277b9c6e20b8cebdb72fcc",
+    "tests/test_v2_lattice.py": "91505895f3d10151b1fc21ee3a8be02f9cfc40def9f82f25385358e1553f209c",
+    "tests/test_v2_simulation.py": "9fa6281fbafd578293f1968cb2bcc445fa8872fdcbbf6f4954e58ba96ef59ffd",
+    "scripts/v2/contract.json": "533f996b9e892aad53864733bcfce093e511608406d0abb5181bd33a8418e04b",
+    "scripts/v2/real_data.py": "a76ce7a924289ca437c953a562e3b67ba79eef6191f34888380fa003ac499c4e",
+    "scripts/v2/real_data_config.json": "75797460e3a0780c7f331d6759bfa5925683752e6b0349048a3c91a2cc84af10",
+    "scripts/v2/summarize_validation.py": "271dba0c9bb0905caa55ad8370517ee0a6d387d9d8b1784eac66d491e598c45d",
+    "scripts/v2/validate.py": "e183184280114d79c590b6c276662fd16d63ecbcfea2488f17f69a000a9c6804"
+  },
+  "full_regression": {
+    "passed": 518,
+    "legacy_tests": 256,
+    "v2_tests": 262,
+    "warnings": 1,
+    "seconds": 172.19
+  },
+  "additional_api_run": {
+    "passed": 24,
+    "new_edge_cases": 3,
+    "seconds": 4.16
+  },
+  "distinct_verified_tests": 521,
+  "initial_run_note": "289 initial tests included 33 newly added v2 lattice fixtures collected during startup.",
+  "benchmark_note": "Numerical model and fit parameters remained fixed. Final packaging also adds source fingerprints, serialization fields, early input validation, and tests after held-out runs began.",
+  "wheel": "/tmp/scdebussy-v2-dist-final/scdebussy-0.0.1-py3-none-any.whl"
+}

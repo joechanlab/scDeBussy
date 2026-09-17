@@ -1,0 +1,8 @@
+{
+  "suite": "smoke",
+  "cases": 19,
+  "passed": true,
+  "failures": [],
+  "release_gate": false,
+  "replacement_recommended": false
+}

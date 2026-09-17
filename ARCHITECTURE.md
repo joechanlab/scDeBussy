@@ -36,13 +36,13 @@ AnnData  (cells × genes, per-patient local pseudotime in obs)
     ▼
 Smoothed matrices  [n_bins × n_genes]  per patient
     │
-    │  scDeBussy.fit()  — EM loop
+    │  tl.scDeBussy(adata, ...)  — fitting and projection in one function
     │  ┌─ E-step: asymmetric DTW (Sakoe-Chiba band, open ends)
     │  │          aligns each patient trajectory → barycenter
     │  └─ M-step: soft-DTW barycenter averaging (tslearn)
     │             updates consensus barycenter  B(τ)
     ▼
-barycenter_  [n_bins × n_genes]  +  per-patient warp paths
+adata.uns["barycenter"]  +  per-patient warp paths
     │
     │  map_cells_to_aligned_pseudotime()
     │  soft-DTW alignment + isotonic regression (monotonicity)
@@ -61,11 +61,16 @@ adata.obs["aligned_pseudotime"]
 
 `smooth_patient_trajectory(adata, patient_key, pseudotime_key, n_bins)` interpolates each patient's cells onto a fixed grid using Gaussian kernel regression (PyTorch tensors for efficiency).
 
-`scDeBussy` is the main estimator class:
-- **`fit(trajectories)`** runs the EM loop until convergence (`tol`) or `max_iter`.
-- E-step uses asymmetric DTW with a Sakoe-Chiba window (≤ 20 % of `n_bins`) and open begin/end to handle partial overlap.
-- M-step calls `tslearn.barycenters.softdtw_barycenter`.
-- **`transform(adata)`** maps raw cells to aligned pseudotime via soft-DTW path + isotonic regression.
+`scDeBussy(adata, ...)` is a function, not an estimator class. It smooths,
+fits, and writes aligned pseudotime and barycenter outputs in one call. The
+legacy DTW path and opt-in soft-EM path remain unchanged in v2 development.
+
+The additive `scdebussy.align` package exposes separate `fit`, `project`,
+`summarize`, and `compare` functions. Its immutable lattice graph is shared by
+enumeration and Numba inference; fitting returns an `AlignmentResult` without
+mutating AnnData. Package exports are lazy so v2 does not import Torch.
+See [the v2 contract](docs/v2.md) for terminal rules, locality support, and
+the distinction between posterior projection and MAP diagnostics.
 
 ### `tl._metrics` — Alignment Quality
 

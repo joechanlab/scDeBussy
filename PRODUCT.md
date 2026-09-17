@@ -63,24 +63,24 @@ This enables controlled evaluation of alignment accuracy against known ground tr
 ```python
 import scdebussy as sd
 
-# 1. Smooth per-patient trajectories onto a shared grid
-trajectories = sd.tl.smooth_patient_trajectory(
-    adata, patient_key="patient_id", pseudotime_key="dpt_pseudotime", n_bins=100
-)
-
-# 2. Align to consensus barycenter
-model = sd.tl.scDeBussy(n_bins=100, max_iter=20)
-model.fit(trajectories)
-model.transform(adata)          # writes adata.obs["aligned_pseudotime"]
+# 1–2. Smooth and align to a consensus barycenter
+sd.tl.scDeBussy(
+    adata, patient_key="patient_id", pseudotime_key="dpt_pseudotime",
+    n_bins=100, max_iter=20,
+)  # writes adata.obs["aligned_pseudotime"]
 
 # 3. Evaluate alignment quality
-sd.tl.cross_batch_knn_purity(adata, k=50, label_key="cell_type",
+sd.tl.cross_batch_knn_purity(adata, n_neighbors=50, label_key="cell_type",
                               batch_key="patient_id")
 print(adata.uns["cross_batch_purity"])
 
 # 4. Visualise
 sd.pl.cross_batch_purity_sweep(adata, k_values=range(10, 100, 10))
 ```
+
+The additive experimental v2 interface is documented in [docs/v2.md](docs/v2.md).
+It returns explicit posterior results and does not replace the recommended v1
+workflow until scientific validation succeeds.
 
 ---
 

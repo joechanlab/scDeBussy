@@ -7,6 +7,7 @@
 :maxdepth: 1
 
 api.md
+v2.md
 notebooks/example.ipynb
 notebooks/benchmark_demo.ipynb
 changelog.md

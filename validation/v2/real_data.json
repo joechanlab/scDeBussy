@@ -1,0 +1,164 @@
+{
+  "status": "completed",
+  "input": "/scratch/chanj3/wangm10/HTAN/results/aligned_scdebussy_preprocessed_v3.h5ad",
+  "n_cells": 34553,
+  "n_genes": 2370,
+  "patients": [
+    "RU1083",
+    "RU263",
+    "RU581",
+    "RU831",
+    "RU1646",
+    "RU1444",
+    "RU151",
+    "RU1303",
+    "RU942"
+  ],
+  "preprocessing": "unchanged input X, cells, and gene order",
+  "v1_config": {
+    "patient_key": "patient",
+    "pseudotime_key": "s_local",
+    "n_bins": 100,
+    "bandwidth": 0.1,
+    "gamma": 0.1,
+    "max_iter": 20,
+    "tol": 0.0001,
+    "use_soft_em": true,
+    "strict_em": false,
+    "verbose": false,
+    "key_added": "v2_evaluation_v1",
+    "barycenter_key": "v2_evaluation_v1_barycenter"
+  },
+  "v2_config": {
+    "patient_key": "patient",
+    "pseudotime_key": "s_local",
+    "n_landmarks": 100,
+    "locality_radius": 0.1,
+    "beta": 1.0,
+    "mode": "open",
+    "n_min": 5,
+    "epsilon": 1e-06,
+    "eta_i": 9728.061612034478,
+    "eta_d": 9728.061612034478,
+    "kappa_i": 3.0,
+    "kappa_d": 3.0,
+    "lambda_i": 29184.184836103435,
+    "lambda_d": 29184.184836103435,
+    "calibration": "band_minimum_quantile",
+    "calibration_quantile": 0.9,
+    "calibration_band": 0.25,
+    "max_iter": 200,
+    "tol": 1e-06,
+    "patience": 3,
+    "d_min": 0.001,
+    "chunk_size": 1024,
+    "backend": "numba"
+  },
+  "baseline": {
+    "coverage": 0.717777777777778,
+    "purity": 0.5525597070965116,
+    "finite_projection": 1.0,
+    "mean_span": 0.8260381593714927
+  },
+  "candidate": {
+    "coverage": 0.7433333333333334,
+    "purity": 0.702077563729305,
+    "finite_projection": 0.9999131768587387,
+    "mean_span": 0.8160984525343675
+  },
+  "candidate_supported_only": {
+    "coverage": 0.7333333333333334,
+    "purity": 0.7051469936819244,
+    "finite_projection": 0.99930541486991,
+    "mean_span": 0.8048098409054671
+  },
+  "baseline_reproduced": false,
+  "gate_d_numeric_pass": false,
+  "replacement_recommended": false,
+  "replacement_note": "Gates A-C and baseline reproduction are also required",
+  "v2_converged": true,
+  "v2_iterations": 7,
+  "v2_coverage_mass": 0.9833345509013438,
+  "v2_diagnostics": {
+    "RU1083": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 2.7657733880914748e-08,
+      "numerical_zero_matches": 9900
+    },
+    "RU263": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 1.226580934599042e-07,
+      "numerical_zero_matches": 9900
+    },
+    "RU581": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 0.0,
+      "numerical_zero_matches": 9900
+    },
+    "RU831": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 0.0,
+      "numerical_zero_matches": 7926
+    },
+    "RU1646": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 0.0,
+      "numerical_zero_matches": 6560
+    },
+    "RU1444": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 0.0,
+      "numerical_zero_matches": 9900
+    },
+    "RU151": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 2.5884219212457538e-08,
+      "numerical_zero_matches": 9900
+    },
+    "RU1303": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 0.0,
+      "numerical_zero_matches": 9900
+    },
+    "RU942": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 4.595844075083733e-06,
+      "numerical_zero_matches": 7922
+    }
+  },
+  "provenance": {
+    "python": "3.11.13",
+    "implementation": "scdebussy.align.v2",
+    "experimental": true,
+    "scdebussy": "0.0.1",
+    "numpy": "2.2.6",
+    "scipy": "1.16.3",
+    "numba": "0.61.2",
+    "anndata": "0.12.10"
+  },
+  "warnings": [
+    "The default of observed=False is deprecated and will be changed to True in a future version of pandas. Pass observed=False to retain current behavior or observed=True to adopt the future default and silence this warning.",
+    "The default of observed=False is deprecated and will be changed to True in a future version of pandas. Pass observed=False to retain current behavior or observed=True to adopt the future default and silence this warning.",
+    "The default of observed=False is deprecated and will be changed to True in a future version of pandas. Pass observed=False to retain current behavior or observed=True to adopt the future default and silence this warning."
+  ],
+  "seconds": 276.64364621415734,
+  "contract_sha256": "533f996b9e892aad53864733bcfce093e511608406d0abb5181bd33a8418e04b"
+}

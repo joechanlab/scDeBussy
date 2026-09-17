@@ -1,0 +1,50 @@
+{
+  "gate_a": "passed: independent fixtures and 200 generated lattice comparisons",
+  "gate_b": "passed: optimization, integration, regression, installed-wheel checks",
+  "gate_c_numeric_suites": {
+    "calibration": {
+      "suite": "calibration",
+      "cases": 10,
+      "passed": true,
+      "failures": [],
+      "release_gate": true,
+      "replacement_recommended": false
+    },
+    "recovery": {
+      "suite": "recovery",
+      "cases": 280,
+      "passed": true,
+      "failures": [],
+      "release_gate": true,
+      "replacement_recommended": false
+    },
+    "null": {
+      "suite": "null",
+      "cases": 300,
+      "passed": true,
+      "failures": [],
+      "release_gate": true,
+      "replacement_recommended": false
+    },
+    "robustness": {
+      "suite": "robustness",
+      "cases": 120,
+      "passed": true,
+      "failures": [],
+      "release_gate": true,
+      "replacement_recommended": false
+    },
+    "sensitivity": {
+      "suite": "sensitivity",
+      "cases": 45,
+      "passed": true,
+      "failures": [],
+      "release_gate": true,
+      "replacement_recommended": false
+    }
+  },
+  "gate_c_scientific_interpretation": "not established: cross-channel responses and absent expression-gene recovery in the eight-patient preset; see full/decomposition.json",
+  "gate_d": "not passed: historical baseline not reproduced; coverage difference exceeds tolerance",
+  "release_status": "experimental implementation, not published",
+  "v1_remains_recommended": true
+}

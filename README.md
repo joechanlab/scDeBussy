@@ -33,6 +33,12 @@ print(adata.uns["barycenter"].keys())
 
 ## Getting started
 
+An additive, experimental affine-gap API is available as `scdebussy.align`.
+It provides posterior alignment, explicit unmatched mass, and patient-level
+permutation comparisons without changing the v1 API. See the
+[v2 guide and limitations](docs/v2.md). V1 remains recommended pending the
+scientific validation gates.
+
 Please refer to the [documentation][],
 in particular, the [API documentation][].
 

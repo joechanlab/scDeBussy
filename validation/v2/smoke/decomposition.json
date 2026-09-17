@@ -1,0 +1,8 @@
+{
+  "contract_sha256": "533f996b9e892aad53864733bcfce093e511608406d0abb5181bd33a8418e04b",
+  "descriptive_only": true,
+  "note": "No post-hoc gate thresholds were introduced. Gap mass does not identify censoring.",
+  "kinetic_null_thresholds": {},
+  "recovery": [],
+  "resolution": []
+}
