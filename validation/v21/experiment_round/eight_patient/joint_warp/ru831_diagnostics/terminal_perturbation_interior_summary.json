@@ -1,0 +1,38 @@
+{
+  "RU831": {
+    "n_interior_landmarks": 64,
+    "interior_local_range": [
+      0.08080808080808081,
+      0.9191919191919192
+    ],
+    "interior_correspondence_mass_sum": 49.455559887694825,
+    "interior_mean_row_max_prob": 0.09129335200535002
+  },
+  "RU1303": {
+    "n_interior_landmarks": 80,
+    "interior_local_range": [
+      0.10101010101010102,
+      0.8989898989898991
+    ],
+    "interior_correspondence_mass_sum": 63.826370368088114,
+    "interior_mean_row_max_prob": 0.10340676715488188
+  },
+  "RU1444": {
+    "n_interior_landmarks": 80,
+    "interior_local_range": [
+      0.10101010101010102,
+      0.8989898989898991
+    ],
+    "interior_correspondence_mass_sum": 66.96653766564788,
+    "interior_mean_row_max_prob": 0.10303979395340623
+  },
+  "RU581": {
+    "n_interior_landmarks": 80,
+    "interior_local_range": [
+      0.10101010101010102,
+      0.8989898989898991
+    ],
+    "interior_correspondence_mass_sum": 66.46649919537657,
+    "interior_mean_row_max_prob": 0.1042131074759635
+  }
+}
