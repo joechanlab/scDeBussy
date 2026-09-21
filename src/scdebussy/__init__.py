@@ -3,6 +3,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 __all__ = [
     "align",
+    "v3",
     "pl",
     "tl",
     "TuningResult",
@@ -27,7 +28,7 @@ def __getattr__(name):
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     value = (
         import_module(f".{name}", __name__)
-        if name in {"align", "pl", "tl"}
+        if name in {"align", "pl", "tl", "v3"}
         else getattr(import_module(".tuning", __name__), name)
     )
     globals()[name] = value

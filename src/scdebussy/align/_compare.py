@@ -46,8 +46,8 @@ def _statistics(summary, labels):
     qb = summary.cell_occupancy[b]
     qa, qb = qa[np.isfinite(qa).all(1)], qb[np.isfinite(qb).all(1)]
     if min(len(qa), len(qb)) >= 2:
-        # W1 for a common equally spaced rank grid (last CDF interval is absent).
-        out[1] = np.abs(np.cumsum(qa.mean(0) - qb.mean(0))[:-1]).sum() / t
+        # W1 integrates the CDF difference over the stored coordinate intervals.
+        out[1] = np.abs(np.cumsum(qa.mean(0) - qb.mean(0))[:-1]) @ np.diff(summary.consensus_coordinates)
     for gene in range(genes):
         ra, rb = summary.residual[a, :, gene], summary.residual[b, :, gene]
         va = np.isfinite(ra) & (summary.residual_support[a] > 0)

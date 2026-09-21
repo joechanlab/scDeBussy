@@ -1,0 +1,17 @@
+{
+  "n_bins": 25,
+  "min_cells_per_bin": 20,
+  "minimum_supporting_patients": 3,
+  "minimum_pair_comparisons": 2,
+  "excluded": [
+    "ASCL1",
+    "NEUROD1",
+    "INSM1",
+    "CHGA",
+    "CHGB",
+    "NCAM1",
+    "DLL3"
+  ],
+  "input": "/scratch/chanj3/wangm10/HTAN/results/aligned_scdebussy_preprocessed_v2_ru942_deg_all.h5ad",
+  "uses_cell_type_labels": false
+}

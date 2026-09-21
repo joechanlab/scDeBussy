@@ -1,0 +1,17 @@
+{
+  "input": "/scratch/chanj3/wangm10/HTAN/results/aligned_scdebussy_preprocessed_v2_ru942_deg_all.h5ad",
+  "input_sha256": "4f26e98a530bbda380121929d543b367884d0fb17beef58061de948ad09f7dc3",
+  "n_cells": 34380,
+  "n_genes": 2758,
+  "patients": ["RU1083", "RU1303", "RU1444", "RU151", "RU263", "RU581", "RU831", "RU942"],
+  "base_git_commit_at_run_start": "a647d697c3d39d93fbce38158c2bd071448c988c",
+  "source_sha256_before_precision_option": "95ab4c33a0c1d550dab2acaadc9986e034e948dbb6e7bbabaccc048faa0a01ee",
+  "source_sha256_after_precision_option": "2e5ddd5a82b10cb1eafa5a8862e63f2261174b9a14c92093b1821e7a0b56ecea",
+  "random_seed": null,
+  "randomness_used": false,
+  "python": "/data1/chanj3/wangm10/conda_envs/scdebussy-py311/bin/python",
+  "worktree": "/tmp/scdebussy-htan-eight",
+  "branch": "exp/htan-eight-patient",
+  "run_directory": "/tmp/scdebussy-htan-eight/validation/v21/experiment_round/eight_patient",
+  "note": "The branch was created from the stated base commit and the active v2.1 files were copied into the isolated worktree before fitting. Per-fit source fingerprints and exact configs are retained in each cache/report. The final branch commit is the code snapshot; earlier fits were generated while that snapshot was still uncommitted."
+}

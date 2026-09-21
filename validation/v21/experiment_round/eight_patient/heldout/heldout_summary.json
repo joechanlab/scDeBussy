@@ -1,0 +1,22 @@
+{
+  "s_local": {
+    "mean_gene_concordance": 0.4210611179709765,
+    "mean_peak_spread": 0.5351089588377724
+  },
+  "trajectory_250": {
+    "mean_gene_concordance": 0.41870597471171,
+    "mean_peak_spread": 0.5133171912832931
+  },
+  "trajectory_250_unit": {
+    "mean_gene_concordance": 0.4330413170505195,
+    "mean_peak_spread": 0.5133171912832931
+  },
+  "moderate_dtw": {
+    "mean_gene_concordance": 0.45872126879344133,
+    "mean_peak_spread": 0.4673123486682809
+  },
+  "terminal_dtw": {
+    "mean_gene_concordance": 0.4201264363785417,
+    "mean_peak_spread": 0.5230024213075061
+  }
+}

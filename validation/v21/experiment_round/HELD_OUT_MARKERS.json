@@ -1,0 +1,6 @@
+{
+  "frozen_before_candidate_fits": true,
+  "genes": ["ASCL1", "NEUROD1", "INSM1", "CHGA", "CHGB", "NCAM1", "DLL3"],
+  "use": "Exclude from all new candidate fitting and feature selection. Evaluate only afterward.",
+  "input": "/scratch/chanj3/wangm10/HTAN/results/aligned_scdebussy_preprocessed_v2_ru942_deg_all.h5ad"
+}

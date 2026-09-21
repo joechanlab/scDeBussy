@@ -1,0 +1,15 @@
+{
+  "patient_key": "patient",
+  "pseudotime_key": "s_local",
+  "n_landmarks": 100,
+  "locality_radius": 0.1,
+  "beta": 1.0,
+  "epsilon": 1e-06,
+  "max_iter": 200,
+  "calibration_quantile": 0.9,
+  "calibration_band": 0.25,
+  "kappa_i": 3.0,
+  "kappa_d": 3.0,
+  "landmark_method": "expression",
+  "consensus_resolution": 100
+}

@@ -95,7 +95,7 @@ def test_log_m_step_does_not_treat_underflow_as_structural_zero(fitted):
 def test_projection_mass_occupancy_and_write(fitted, tmp_path):
     p = align.project(fitted)
     np.testing.assert_allclose(p.probability.sum(1) + p.unprojected, 1.0, atol=1e-10)
-    np.testing.assert_allclose(p.position, p.conditional_probability @ (np.arange(6) / 6))
+    np.testing.assert_allclose(p.position, p.conditional_probability @ fitted.consensus_coordinates)
     assert (p.entropy >= 0).all()
     summary = align.summarize(fitted)
     np.testing.assert_allclose(summary.cell_occupancy.sum(1), 1.0)
@@ -109,6 +109,9 @@ def test_projection_mass_occupancy_and_write(fitted, tmp_path):
     data.write_h5ad(path)
     reread = ad.read_h5ad(path)
     np.testing.assert_allclose(reread.uns["scdebussy_v2"]["barycenter"], fitted.barycenter)
+    np.testing.assert_array_equal(reread.uns["scdebussy_v2"]["consensus_coordinates"], fitted.consensus_coordinates)
+    assert fitted.consensus_coordinates[[0, -1]].tolist() == [0, 1]
+    assert reread.uns["scdebussy_v2"]["provenance"]["contract_version"] == "affine-gap-linear-v2.1"
 
 
 def test_projection_validation(fitted):
@@ -137,7 +140,7 @@ def test_remote_cells_do_not_establish_coverage():
 
 def test_no_local_landmark_and_nonconvergence():
     data = dataset(patients=1)
-    data.obs["time"] = 1.0
+    data.obs["time"] = 0.51
     with pytest.raises(align.InsufficientSupportError):
         fit(data, locality_radius=0.001)
     result = fit(dataset(), max_iter=1)
@@ -221,6 +224,7 @@ def test_permutation_analytic_null(monkeypatch):
         np.ones(4),
         np.zeros((4, 2, 1)),
         np.ones((4, 2)),
+        np.linspace(0, 1, 2),
     )
     monkeypatch.setattr("scdebussy.align._compare.summarize", lambda result: summary)
     result = SimpleNamespace(patients=("a", "b", "c", "d"), genes=("g",))
@@ -283,9 +287,9 @@ def test_projection_retains_unmatched_and_underflow_probability(fitted):
 
 def test_unaligned_patient_remains_undefined():
     data = dataset()
-    data.obs.loc[data.obs.patient == "p0", "time"] = 1.0
+    data.obs.loc[data.obs.patient == "p0", "time"] = 0.1
     with pytest.warns(RuntimeWarning, match="p0"):
-        result = fit(data, locality_radius=0.1)
+        result = fit(data, locality_radius=0.09)
     assert result.diagnostics["p0"]["unaligned"]
     assert result.posteriors[0].no_match_probability == pytest.approx(1.0)
     summary = align.summarize(result)

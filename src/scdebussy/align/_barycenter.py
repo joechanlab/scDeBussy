@@ -20,19 +20,38 @@ def costs(landmarks, barycenter, block_size=64):
     return delta
 
 
-def initialize(landmarks):
-    """Equal-patient pointwise mean with interpolation only at initialization."""
-    size, genes = landmarks[0].expression.shape
+def initialize(landmarks, coordinates=None, locality_radius=None):
+    """Equal-patient mean at actual consensus coordinates, then fill missing B.
+
+    Only the initial consensus may fill globally unsupported coordinates; this
+    never changes patient support or the fixed EM objective.
+    """
+    from ._project import interpolation_weights
+
+    coordinates = landmarks[0].coordinates if coordinates is None else coordinates
+    size, genes = len(coordinates), landmarks[0].expression.shape[1]
     total, counts = np.zeros((size, genes)), np.zeros(size)
     for lm in landmarks:
-        total[lm.matchable] += lm.expression[lm.matchable]
-        counts += lm.matchable
+        weights = interpolation_weights(coordinates, lm.coordinates,
+                                        np.inf if locality_radius is None else locality_radius,
+                                        lm.support_intervals)
+        supported = (weights.sum(1) > 0) & ~np.any((weights > 0) & ~lm.matchable, axis=1)
+        total[supported] += weights[supported] @ lm.expression
+        counts += supported
     supported = counts > 0
     if not supported.any():
-        raise InsufficientSupportError("no matchable landmark; inspect locality radius and n_min")
+        available = [lm for lm in landmarks if lm.matchable.any()]
+        if not available:
+            raise InsufficientSupportError("no matchable landmark; inspect locality radius and n_min")
+        # Very narrow observed domains may fall entirely between consensus knots.
+        # Seed B only; neither patient support nor posterior rows are modified.
+        return np.mean([np.column_stack([
+            np.interp(coordinates, lm.coordinates[lm.matchable], lm.expression[lm.matchable, g])
+            for g in range(genes)
+        ]) for lm in available], axis=0)
     total[supported] /= counts[supported, None]
     for g in range(genes):
-        total[:, g] = np.interp(np.arange(size), np.flatnonzero(supported), total[supported, g])
+        total[:, g] = np.interp(coordinates, coordinates[supported], total[supported, g])
     return total
 
 

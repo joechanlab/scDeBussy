@@ -3,6 +3,7 @@
 import hashlib
 import platform
 import warnings
+from dataclasses import replace
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -48,6 +49,11 @@ def fit(
     d_min=1e-3,
     chunk_size=1024,
     backend="numba",
+    landmark_method="fixed",
+    consensus_resolution=None,
+    discovery_resolution=None,
+    precision_mode="estimated",
+    contribution_cap_quantile=0.95,
 ) -> AlignmentResult:
     """Fit a fixed-temperature Gibbs alignment, without mutating ``adata``.
 
@@ -55,6 +61,16 @@ def fit(
     used as supplied. Gaps can represent temporal resampling or unmatched data;
     neither the objective nor its posteriors identify biological missingness.
     """
+    if landmark_method not in {"fixed", "expression"}:
+        raise ValueError("landmark_method must be fixed or expression")
+    if precision_mode not in {"estimated", "unit", "capped"}:
+        raise ValueError("precision_mode must be estimated, unit, or capped")
+    if not 0 < contribution_cap_quantile <= 1:
+        raise ValueError("contribution_cap_quantile must be in (0,1]")
+    consensus_resolution = n_landmarks if consensus_resolution is None else consensus_resolution
+    for name, value in (("consensus_resolution", consensus_resolution), ("discovery_resolution", discovery_resolution)):
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 2):
+            raise ValueError(f"{name} must be an integer >= 2")
     if mode not in {"open", "global"} or backend not in {"numpy", "numba"}:
         raise ValueError("mode must be open/global and backend must be numpy/numba")
     for name, value in (
@@ -89,15 +105,30 @@ def fit(
         n_min=n_min,
         epsilon=epsilon,
         chunk_size=chunk_size,
+        landmark_method=landmark_method,
+        discovery_resolution=discovery_resolution,
     )
-    barycenter = initialize(landmarks)
+    consensus_coordinates = np.linspace(0.0, 1.0, consensus_resolution)
+    barycenter = initialize(landmarks, consensus_coordinates, locality_radius)
+    if precision_mode == "unit":
+        landmarks = tuple(replace(lm, precision=np.ones_like(lm.precision)) for lm in landmarks)
+    elif precision_mode == "capped":
+        gene_cost = np.zeros(adata.n_vars)
+        for lm in landmarks:
+            nearest = np.argmin(np.abs(lm.coordinates[:, None] - consensus_coordinates[None, :]), axis=1)
+            residual = lm.expression - barycenter[nearest]
+            gene_cost += np.sum((residual[lm.matchable] ** 2) * lm.precision[lm.matchable], axis=0)
+        positive = gene_cost[gene_cost > 0]
+        cap = np.quantile(positive, contribution_cap_quantile) if len(positive) else 0.0
+        weights = np.minimum(1.0, cap / np.maximum(gene_cost, 1e-300))
+        landmarks = tuple(replace(lm, precision=lm.precision * weights) for lm in landmarks)
     calibration = "explicit"
     if eta_i is None:
         samples = []
         for lm in landmarks:
             delta = costs(lm, barycenter)
             for i in np.flatnonzero(lm.matchable):
-                band = np.abs(lm.coordinates[i] - np.arange(n_landmarks) / n_landmarks) <= calibration_band
+                band = np.abs(lm.coordinates[i] - consensus_coordinates) <= calibration_band
                 if band.any():
                     samples.append(delta[i, band].min())
         eta = float(np.quantile(samples, calibration_quantile, method="linear")) if samples else 0.0
@@ -112,6 +143,10 @@ def fit(
         "patient_key": patient_key,
         "pseudotime_key": pseudotime_key,
         "n_landmarks": n_landmarks,
+        "landmark_method": landmark_method,
+        "consensus_resolution": consensus_resolution,
+        "discovery_resolution": discovery_resolution or max(201, 4 * n_landmarks + 1),
+        "discovery_criterion": "density-balanced-standardized-slope-peaks-v1",
         "locality_radius": locality_radius,
         "beta": beta,
         "mode": mode,
@@ -132,6 +167,8 @@ def fit(
         "d_min": d_min,
         "chunk_size": chunk_size,
         "backend": backend,
+        "precision_mode": precision_mode,
+        "contribution_cap_quantile": contribution_cap_quantile,
     }
 
     def e_step(b, counts=False):
@@ -182,7 +219,9 @@ def fit(
         "python": platform.python_version(),
         "implementation": "scdebussy.align.v2",
         "experimental": True,
-        "contract_version": "affine-gap-linear-v2.0",
+        "contract_version": "affine-gap-linear-v2.1",
+        "coordinate_convention": "endpoint-inclusive-local-pseudotime",
+        "projection_basis": "adjacent-linear-supported-v1",
         "source_sha256": _source_fingerprint(),
     }
     for package in ("scdebussy", "numpy", "scipy", "numba", "anndata"):
@@ -225,4 +264,5 @@ def fit(
         cell_time.copy(),
         provenance,
         diagnostic,
+        consensus_coordinates,
     )

@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from scdebussy import align
+from scdebussy.align._api import _source_fingerprint
 
 SCENARIOS = {
     "null": {},
@@ -199,11 +200,36 @@ def main():
     contract_text = args.contract.read_text()
     contract = json.loads(contract_text)
     fingerprint = hashlib.sha256(contract_text.encode()).hexdigest()
+    source_fingerprint = _source_fingerprint()
     args.output.mkdir(parents=True, exist_ok=True)
     existing = args.output / "contract.json"
     if existing.exists() and existing.read_text() != contract_text:
         raise ValueError("output directory contains a different frozen contract")
     existing.write_text(contract_text)
+    if "identity_position_max_abs_error" in contract["thresholds"]:
+        from types import SimpleNamespace
+        axis = np.linspace(0, 1, 100)
+        time_axis = np.linspace(0, 1, 1001)
+        log_a = np.full((100, 100), -np.inf)
+        np.fill_diagonal(log_a, 0)
+        fixture = SimpleNamespace(
+            consensus_coordinates=axis, barycenter=np.zeros((100, 1)),
+            landmarks=(SimpleNamespace(patient="identity", coordinates=axis),),
+            posteriors=(SimpleNamespace(log_a=log_a),), patients=("identity",),
+            cell_ids=np.arange(len(time_axis)).astype(str),
+            cell_patients=np.repeat("identity", len(time_axis)), cell_pseudotime=time_axis,
+            config={"chunk_size": 100, "locality_radius": 0.1},
+        )
+        projected = align.project(fixture)
+        error = float(np.max(np.abs(projected.position - time_axis)))
+        missing = float(np.max(projected.unprojected))
+        passed = (error <= contract["thresholds"]["identity_position_max_abs_error"]
+                  and missing <= contract["thresholds"]["identity_unprojected_max"])
+        (args.output / "identity.json").write_text(json.dumps(dict(
+            max_abs_error=error, max_unprojected=missing, passed=passed,
+            source_sha256=source_fingerprint, contract_sha256=fingerprint), indent=2))
+        if not passed:
+            raise ArithmeticError("identity coordinate acceptance failed before evaluation")
     suites = ["calibration", "recovery", "robustness", "null", "sensitivity"] if args.suite == "all" else [args.suite]
     for suite in suites:
         rows = []
@@ -211,15 +237,18 @@ def main():
             path = args.output / f"{suite}_{index:04d}.json"
             if path.exists():
                 row = json.loads(path.read_text())
-                if row.get("contract_sha256") != fingerprint:
-                    raise ValueError("cached case belongs to a different contract")
+                if row.get("contract_sha256") != fingerprint or row.get("source_sha256") != source_fingerprint:
+                    raise ValueError("cached case belongs to a different contract or source")
             else:
                 row = run_case(name, cfg, fit_config, contract)
                 row["contract_sha256"] = fingerprint
+                row["source_sha256"] = source_fingerprint
                 path.write_text(json.dumps(row, indent=2))
             rows.append(row)
             print(f"{suite} {index + 1}: {name} seed={cfg.seed} {row['status']} ({row['seconds']:.1f}s)", flush=True)
         report = evaluate(rows, suite, contract)
+        report["source_sha256"] = source_fingerprint
+        report["contract_sha256"] = fingerprint
         (args.output / f"{suite}_summary.json").write_text(json.dumps(report, indent=2))
         print(json.dumps(report), flush=True)
 

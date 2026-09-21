@@ -1,0 +1,279 @@
+{
+  "coverage": 0.85,
+  "purity": 0.7849661959743788,
+  "rejection_rate": 0.00017452006980802793,
+  "unsupported_rate": 0.0031413612565445027,
+  "mean_unprojected_mass": 0.003145947715423696,
+  "mean_abs_displacement": 0.008899231382510952,
+  "max_abs_displacement": 0.3400013904025587,
+  "per_patient": [
+    {
+      "method": null,
+      "patient": "RU1083",
+      "cells": 3148,
+      "coverage": 0.96,
+      "purity": 0.7901978163825698,
+      "rejection_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "mean_unprojected_mass": 3.1466660510471927e-18,
+      "mean_abs_displacement": 1.745049248878943e-15,
+      "max_abs_displacement": 9.325873406851315e-15,
+      "position_min": 0.0,
+      "position_max": 1.0
+    },
+    {
+      "method": null,
+      "patient": "RU1303",
+      "cells": 658,
+      "coverage": 0.8,
+      "purity": 0.4527249194873855,
+      "rejection_rate": 0.0,
+      "unsupported_rate": 0.0060790273556231,
+      "mean_unprojected_mass": 0.00481859348338979,
+      "mean_abs_displacement": 0.02264748477177179,
+      "max_abs_displacement": 0.030303030303067024,
+      "position_min": 0.0,
+      "position_max": 0.9696969696969697
+    },
+    {
+      "method": null,
+      "patient": "RU1444",
+      "cells": 2623,
+      "coverage": 1.0,
+      "purity": 0.7907144121811401,
+      "rejection_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "mean_unprojected_mass": 7.269752237305878e-13,
+      "mean_abs_displacement": 6.625310229429101e-16,
+      "max_abs_displacement": 9.2148511043888e-15,
+      "position_min": 0.0,
+      "position_max": 1.0
+    },
+    {
+      "method": null,
+      "patient": "RU151",
+      "cells": 3675,
+      "coverage": 0.84,
+      "purity": 0.5676647200540107,
+      "rejection_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "mean_unprojected_mass": 2.662693565430934e-14,
+      "mean_abs_displacement": 4.3259235951512626e-16,
+      "max_abs_displacement": 9.2148511043888e-15,
+      "position_min": 0.0,
+      "position_max": 1.0
+    },
+    {
+      "method": null,
+      "patient": "RU263",
+      "cells": 4543,
+      "coverage": 0.98,
+      "purity": 0.7101123412471708,
+      "rejection_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "mean_unprojected_mass": 9.022254818300708e-12,
+      "mean_abs_displacement": 1.5685613639136434e-15,
+      "max_abs_displacement": 1.84297022087776e-14,
+      "position_min": 0.0,
+      "position_max": 1.0
+    },
+    {
+      "method": null,
+      "patient": "RU581",
+      "cells": 14769,
+      "coverage": 1.0,
+      "purity": 0.867084991725675,
+      "rejection_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "mean_unprojected_mass": 9.406427370872325e-14,
+      "mean_abs_displacement": 1.793049317060918e-15,
+      "max_abs_displacement": 9.2148511043888e-15,
+      "position_min": 0.0,
+      "position_max": 1.0
+    },
+    {
+      "method": null,
+      "patient": "RU831",
+      "cells": 2444,
+      "coverage": 0.43,
+      "purity": 0.9075487373933774,
+      "rejection_rate": 0.0016366612111292963,
+      "unsupported_rate": 0.018821603927986905,
+      "mean_unprojected_mass": 0.018821604236899644,
+      "mean_abs_displacement": 0.11300370840241188,
+      "max_abs_displacement": 0.3400013904025587,
+      "position_min": 0.29292929292929293,
+      "position_max": 0.9191919191919192
+    },
+    {
+      "method": null,
+      "patient": "RU942",
+      "cells": 2520,
+      "coverage": 0.79,
+      "purity": 0.7110178791725239,
+      "rejection_rate": 0.0007936507936507937,
+      "unsupported_rate": 0.023015873015873017,
+      "mean_unprojected_mass": 0.023407558390806115,
+      "mean_abs_displacement": 0.006064768093994556,
+      "max_abs_displacement": 0.020202020202093718,
+      "position_min": 0.0,
+      "position_max": 1.0
+    }
+  ],
+  "ru1303": {
+    "LUAD": {
+      "n": 210,
+      "median_position": 0.24963037959216655
+    },
+    "SCLC-A": {
+      "n": 448,
+      "median_position": 0.7193396019180092
+    },
+    "SCLC-N": {
+      "n": 0,
+      "median_position": null
+    },
+    "sclc_a_in_other_sclc_n_q10_q90": 0.13169642857142858
+  },
+  "held_out_marker_agreement": {
+    "available": false,
+    "reason": "All expression genes, including known lineage markers, were supplied to fitting; this cohort has no predeclared held-out marker panel."
+  },
+  "name": "trajectory_250",
+  "description": "Top 250 label-free recurrent trajectory genes, restricted warp",
+  "input": "/scratch/chanj3/wangm10/HTAN/results/aligned_scdebussy_preprocessed_v2_ru942_deg_all.h5ad",
+  "requested_config": {
+    "name": "trajectory_250",
+    "description": "Top 250 label-free recurrent trajectory genes, restricted warp",
+    "transform": {
+      "genes_file": "validation/v21/experiment_round/eight_patient/feature_selection/top_250.json",
+      "patient_gene_center": false
+    },
+    "fit": {
+      "patient_key": "patient",
+      "pseudotime_key": "s_local",
+      "n_landmarks": 100,
+      "consensus_resolution": 100,
+      "landmark_method": "fixed",
+      "locality_radius": 0.1,
+      "beta": 1.0,
+      "mode": "open",
+      "n_min": 5,
+      "epsilon": 1e-06,
+      "kappa_i": 3.0,
+      "kappa_d": 3.0,
+      "calibration_quantile": 0.9,
+      "calibration_band": 0.25,
+      "max_iter": 200,
+      "tol": 1e-06,
+      "patience": 3,
+      "d_min": 0.001,
+      "chunk_size": 1024,
+      "backend": "numba"
+    }
+  },
+  "resolved_fit_config": {
+    "patient_key": "patient",
+    "pseudotime_key": "s_local",
+    "n_landmarks": 100,
+    "landmark_method": "fixed",
+    "consensus_resolution": 100,
+    "discovery_resolution": 401,
+    "discovery_criterion": "density-balanced-standardized-slope-peaks-v1",
+    "locality_radius": 0.1,
+    "beta": 1.0,
+    "mode": "open",
+    "n_min": 5,
+    "epsilon": 1e-06,
+    "eta_i": 6351.063452858485,
+    "eta_d": 6351.063452858485,
+    "kappa_i": 3.0,
+    "kappa_d": 3.0,
+    "lambda_i": 19053.190358575455,
+    "lambda_d": 19053.190358575455,
+    "calibration": "band_minimum_quantile",
+    "calibration_quantile": 0.9,
+    "calibration_band": 0.25,
+    "max_iter": 200,
+    "tol": 1e-06,
+    "patience": 3,
+    "d_min": 0.001,
+    "chunk_size": 1024,
+    "backend": "numba"
+  },
+  "converged": true,
+  "iterations": 7,
+  "diagnostics": {
+    "RU942": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 0.0,
+      "numerical_zero_matches": 9464
+    },
+    "RU151": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 3.7114659789949656e-08,
+      "numerical_zero_matches": 9900
+    },
+    "RU263": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 0.0,
+      "numerical_zero_matches": 9900
+    },
+    "RU1083": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 5.596666596829891e-08,
+      "numerical_zero_matches": 9900
+    },
+    "RU1444": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 1.4118995750322938e-08,
+      "numerical_zero_matches": 9900
+    },
+    "RU581": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 1.5789555618539453e-07,
+      "numerical_zero_matches": 9900
+    },
+    "RU831": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 0.0,
+      "numerical_zero_matches": 7937
+    },
+    "RU1303": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 0.0,
+      "numerical_zero_matches": 9903
+    }
+  },
+  "provenance": {
+    "python": "3.11.13",
+    "implementation": "scdebussy.align.v2",
+    "experimental": true,
+    "contract_version": "affine-gap-linear-v2.1",
+    "coordinate_convention": "endpoint-inclusive-local-pseudotime",
+    "projection_basis": "adjacent-linear-supported-v1",
+    "source_sha256": "95ab4c33a0c1d550dab2acaadc9986e034e948dbb6e7bbabaccc048faa0a01ee",
+    "scdebussy": "0.0.1",
+    "numpy": "2.2.6",
+    "scipy": "1.16.3",
+    "numba": "0.61.2",
+    "anndata": "0.12.10"
+  },
+  "seconds": 9.713025814853609
+}

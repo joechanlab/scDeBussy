@@ -1,12 +1,13 @@
 """Refit v1 and v2 on the HTAN cohort and cache both barycenters for plotting.
 
 Mirrors scripts/v2/real_data.py exactly (same config, same input, same keys) so the
-cached arrays correspond to the numbers already recorded in validation/v2/real_data.json.
+cached arrays describe the current source and supplied configuration.
 """
 
 import json
 import time
 import warnings
+import argparse
 from pathlib import Path
 
 import anndata as ad
@@ -14,11 +15,16 @@ import numpy as np
 
 from scdebussy import align, tl
 
-H5AD = "/scratch/chanj3/wangm10/HTAN/results/aligned_scdebussy_preprocessed_v3.h5ad"
-OUT = Path(
-    "/tmp/claude-164119608/-data1-chanj3-wangm10-scDeBussy/c71890ea-55a9-455a-9c01-c8686eb93d37/scratchpad/htan_barycenters.npz"
-)
-CONFIG = json.loads(Path("/tmp/scdebussy-v2/scripts/v2/real_data_config.json").read_text())
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--adata", required=True)
+parser.add_argument("--output", type=Path, required=True)
+parser.add_argument("--config", type=Path, default=Path(__file__).resolve().parents[3] / "scripts/v2/real_data_config.json")
+args = parser.parse_args()
+H5AD, OUT = args.adata, args.output
+if OUT.exists():
+    raise ValueError("choose a new output path; existing caches are not overwritten")
+OUT.parent.mkdir(parents=True, exist_ok=True)
+CONFIG = json.loads(args.config.read_text())
 
 t0 = time.monotonic()
 print("loading", H5AD, flush=True)
@@ -62,6 +68,17 @@ np.savez_compressed(
     v1_bary=v1_bary,
     v1_genes=v1_genes,
     v2_bary=v2_bary,
+    v2_coordinates=result.consensus_coordinates,
+    v1_coordinates=np.asarray(data.uns["v1_bary"]["aligned_pseudotime"]),
+    v2_provenance=json.dumps(result.provenance),
+    v2_converged=result.converged,
+    v2_iterations=len(result.history),
+    v2_history=json.dumps(result.history),
+    v2_diagnostics=json.dumps(result.diagnostics),
+    v2_config=json.dumps(result.config),
+    cell_ids=np.asarray(data.obs_names, dtype=str),
+    v2_landmark_coordinates=np.concatenate([lm.coordinates for lm in result.landmarks]),
+    v2_landmark_offsets=np.r_[0, np.cumsum([len(lm.coordinates) for lm in result.landmarks])],
     v2_genes=v2_genes,
     v2_identified=np.asarray(result.identified),
     v2_weakly=np.asarray(result.weakly_identified),

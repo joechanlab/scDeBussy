@@ -5,6 +5,7 @@ construction, same robust rescale, same cell-type palette. The per-bin consisten
 strip and the label-free metric annotations are omitted.
 """
 
+import argparse
 from pathlib import Path
 
 import anndata as ad
@@ -17,8 +18,14 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 
-SCRATCH = Path("/tmp/claude-164119608/-data1-chanj3-wangm10-scDeBussy/c71890ea-55a9-455a-9c01-c8686eb93d37/scratchpad")
-H5AD = "/scratch/chanj3/wangm10/HTAN/results/aligned_scdebussy_preprocessed_v3.h5ad"
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--cache", type=Path, required=True)
+parser.add_argument("--output", type=Path, required=True)
+parser.add_argument("--adata", required=True)
+args = parser.parse_args()
+args.output.parent.mkdir(parents=True, exist_ok=True)
+
+H5AD = args.adata
 
 GRAY = np.array([0.91, 0.91, 0.91])
 PATIENT_KEY = "patient"
@@ -72,10 +79,12 @@ def per_patient_mean_target(obs, patients, axis_key, target, n_bins, min_cells, 
 # ---- assemble the three axes ----------------------------------------------------------
 adata = ad.read_h5ad(H5AD)
 obs = adata.obs.copy()
-cached = np.load(SCRATCH / "htan_barycenters.npz", allow_pickle=True)
+cached = np.load(args.cache, allow_pickle=False)
 assert list(cached["cell_patient"]) == list(obs[PATIENT_KEY].astype(str)), "cell order mismatch"
 # Name must contain "aligned" so the rescale rule above treats it as a shared coordinate.
+assert list(cached["cell_ids"]) == list(obs.index), "cell identity/order mismatch"
 obs["aligned_pseudotime_v2"] = cached["v2_pos"]
+obs["aligned_pseudotime"] = cached["v1_pos"]
 
 PANELS = [
     ("BEFORE (local pseudotime)", "s_local"),
@@ -125,7 +134,7 @@ fig.legend(
 )
 fig.suptitle("HTAN LUAD-to-SCLC alignment", fontsize=12, y=1.0)
 
-out = SCRATCH / "htan_before_after_v2.png"
+out = args.output
 fig.savefig(out, dpi=180, bbox_inches="tight")
 print("saved:", out)
 

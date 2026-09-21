@@ -1,5 +1,6 @@
 """Barycenter heatmap after v2 alignment, with v1 under the same gene ordering."""
 
+import argparse
 from pathlib import Path
 
 import matplotlib as mpl
@@ -7,8 +8,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 mpl.use("agg")
-SCRATCH = Path("/tmp/claude-164119608/-data1-chanj3-wangm10-scDeBussy/c71890ea-55a9-455a-9c01-c8686eb93d37/scratchpad")
-d = np.load(SCRATCH / "htan_barycenters.npz", allow_pickle=True)
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--cache", type=Path, required=True)
+parser.add_argument("--output", type=Path, required=True)
+args = parser.parse_args()
+args.output.parent.mkdir(parents=True, exist_ok=True)
+
+d = np.load(args.cache, allow_pickle=False)
+n_patients = len(d["v2_landmark_offsets"]) - 1
+n_cells = len(d["cell_ids"])
 
 v1, v2 = d["v1_bary"], d["v2_bary"]  # (100 landmarks, 2370 genes)
 genes = d["v2_genes"]
@@ -42,11 +50,12 @@ z1, z2, kept_genes = z1[keep], z2[keep], genes[keep]
 
 # Order genes ONCE, by centre of mass of positive v2 signal (steadier than argmax).
 w = np.clip(z2, 0, None)
-com = (w * np.arange(z2.shape[1])).sum(1) / np.maximum(w.sum(1), 1e-12)
+com = (w * d["v2_coordinates"]).sum(1) / np.maximum(w.sum(1), 1e-12)
 order = np.argsort(com)
 z2, z1, kept_genes = z2[order], z1[order], kept_genes[order]
 
-tau = np.linspace(0, 1, z2.shape[1])
+tau = d["v2_coordinates"]
+tau1 = d["v1_coordinates"]
 VLIM = 2.5
 
 fig = plt.figure(figsize=(11.2, 6.9), dpi=200)
@@ -68,7 +77,7 @@ for col, (z, name) in enumerate([(z2, "scDeBussy v2"), (z1, "v1 (same gene order
     ax = fig.add_subplot(gs[0, col])
     axes.append(ax)
     im = ax.imshow(
-        z, aspect="auto", cmap="RdBu_r", vmin=-VLIM, vmax=VLIM, interpolation="nearest", extent=[0, 1, z.shape[0], 0]
+        z, aspect="auto", cmap="RdBu_r", vmin=-VLIM, vmax=VLIM, interpolation="nearest", extent=[(tau if col == 0 else tau1)[0], (tau if col == 0 else tau1)[-1], z.shape[0], 0]
     )
     ax.set_title(
         name,
@@ -104,7 +113,7 @@ for col, (z, name) in enumerate([(z2, "scDeBussy v2"), (z1, "v1 (same gene order
 for col, (b, _ax) in enumerate(zip([v2, v1], axes, strict=True)):
     step = np.abs(np.diff(b.astype(float), axis=0)).mean(1)
     axs = fig.add_subplot(gs[1, col])
-    axs.fill_between(tau[1:], step, color="#4C4C4C", lw=0)
+    axs.fill_between((tau if col == 0 else tau1)[1:], step, color="#4C4C4C", lw=0)
     axs.set_ylim(0, 0.16)
     axs.set_xlim(0, 1)
     axs.set_yticks([])
@@ -134,7 +143,7 @@ cb.ax.tick_params(labelsize=8, colors="#595959", length=3)
 cb.outline.set_edgecolor("#D4D4D4")
 
 fig.suptitle(
-    "HTAN LUAD→SCLC consensus trajectory after alignment  ·  9 patients, 34,553 cells",
+    f"HTAN LUAD→SCLC consensus trajectory after alignment  ·  {n_patients} patients, {n_cells:,} cells",
     fontsize=12.5,
     fontweight="bold",
     color="#1A1A1A",
@@ -163,7 +172,7 @@ fig.legend(
     columnspacing=1.4,
 )
 
-out = SCRATCH / "htan_v2_heatmap.png"
+out = args.output
 fig.savefig(out, bbox_inches="tight", facecolor="white")
 print("wrote", out)
 
@@ -172,6 +181,6 @@ print(f"\n{'gene':<9}{'phase':<9}{'v2 peak tau':>12}{'v1 peak tau':>12}")
 for g in MARKERS:
     if g in set(kept_genes):
         i = list(kept_genes).index(g)
-        print(f"{g:<9}{MARKERS[g]:<9}{tau[np.argmax(z2[i])]:>12.2f}{tau[np.argmax(z1[i])]:>12.2f}")
+        print(f"{g:<9}{MARKERS[g]:<9}{tau[np.argmax(z2[i])]:>12.2f}{tau1[np.argmax(z1[i])]:>12.2f}")
     else:
         print(f"{g:<9}{MARKERS[g]:<9}{'dropped by HVG filter':>25}")

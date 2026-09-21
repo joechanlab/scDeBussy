@@ -1,0 +1,11 @@
+{
+  "objective_fits": ["trajectory_250_unit", "trajectory_250"],
+  "omega_values": [0.0, 0.01, 0.03, 0.06, 0.1, 0.2, 0.4],
+  "terminal_cost_values": [1.0, 0.2, 0.1],
+  "internal_cost": 1.0,
+  "unit_objective_penalty_scale": "fixed",
+  "estimated_objective_penalty_scale": "per-patient median diagonal match cost",
+  "method": "fixed-consensus Viterbi post-fit prototype",
+  "not_a_v2_posterior_fit": true,
+  "seed": null
+}

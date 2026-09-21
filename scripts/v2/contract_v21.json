@@ -1,0 +1,87 @@
+{
+  "version": 2,
+  "baseline_commit": "a8de9c4d86fb620e2c08e21ee1edc67f29568c42",
+  "status": "experimental; thresholds frozen before held-out evaluation",
+  "fit": {
+    "patient_key": "patient",
+    "pseudotime_key": "s_local",
+    "n_landmarks": 50,
+    "locality_radius": 0.1,
+    "beta": 1.0,
+    "epsilon": 0.001,
+    "eta_i": 2.0,
+    "eta_d": 2.0,
+    "kappa_i": 3.0,
+    "kappa_d": 3.0,
+    "max_iter": 200,
+    "landmark_method": "expression",
+    "consensus_resolution": 50
+  },
+  "calibration_seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "heldout_seeds": [
+    100,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109
+  ],
+  "null_seed_start": 1000,
+  "null_replicates": 100,
+  "n_perm": 999,
+  "thresholds": {
+    "null_rejection_rate_max": 0.1,
+    "recovery_rmse_max": 0.2,
+    "recovery_finite_projection_min": 0.9,
+    "resolution_rmse_range_max": 0.05,
+    "confident_bad_projection_fraction_max": 0.1,
+    "bad_projection_error": 0.25,
+    "confidence_unprojected_max": 0.1,
+    "confidence_entropy_max": 0.2,
+    "real_coverage_tolerance": 0.02,
+    "real_purity_min": 0.63,
+    "baseline_coverage_reference": 0.89,
+    "baseline_purity_reference": 0.63,
+    "identity_position_max_abs_error": 1e-12,
+    "identity_unprojected_max": 1e-12
+  },
+  "sensitivity": {
+    "n_landmarks": [
+      50,
+      100,
+      200
+    ],
+    "locality_radius": [
+      0.05,
+      0.1,
+      0.2
+    ],
+    "beta": [
+      0.25,
+      1.0,
+      4.0
+    ],
+    "calibration_band": [
+      0.1,
+      0.25,
+      1.0
+    ],
+    "kappa": [
+      1.0,
+      3.0,
+      6.0
+    ]
+  },
+  "model_contract": "affine-gap-linear-v2.1",
+  "coordinate_convention": "endpoint-inclusive-local-pseudotime"
+}

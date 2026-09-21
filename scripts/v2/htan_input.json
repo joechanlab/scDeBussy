@@ -1,0 +1,9 @@
+{
+  "input": "/scratch/chanj3/wangm10/HTAN/results/aligned_scdebussy_preprocessed_v2_ru942_deg_all.h5ad",
+  "patients": ["RU1083", "RU1303", "RU1444", "RU151", "RU263", "RU581", "RU831", "RU942"],
+  "excluded_patients": ["RU1646"],
+  "description": "Current future HTAN test input: eight patients with RU942 DEG-PCA pseudotime.",
+  "n_cells": 34380,
+  "n_genes": 2758,
+  "pipeline_rerun_after_switch": false
+}

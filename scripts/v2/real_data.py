@@ -39,8 +39,13 @@ def evaluate(path, fit_config, contract):
     """Run both algorithms and report scientific gates without promoting v2."""
     started = time.monotonic()
     data = ad.read_h5ad(path)
-    if data.obs.patient.nunique() != 9:
-        raise ValueError("the replacement gate requires the specified nine-patient cohort")
+    expected_patients = {"RU1083", "RU1303", "RU1444", "RU151", "RU263", "RU581", "RU831", "RU942"}
+    observed_patients = set(data.obs.patient.astype(str).unique())
+    if observed_patients != expected_patients:
+        raise ValueError(
+            "the HTAN test requires the eight-patient RU942-updated cohort "
+            f"without RU1646; observed={sorted(observed_patients)}"
+        )
     v1_options = {
         "patient_key": "patient",
         "pseudotime_key": "s_local",
