@@ -1,0 +1,300 @@
+{
+  "coverage": 0.45555555555555566,
+  "purity": 0.36433309066654057,
+  "rejection_rate": 0.0005498798946545886,
+  "unsupported_rate": 0.0008971724596995919,
+  "mean_unprojected_mass": 0.0009125945383393955,
+  "mean_abs_displacement": 0.11787022485880033,
+  "max_abs_displacement": 0.3944682812001169,
+  "per_patient": [
+    {
+      "method": null,
+      "patient": "RU1083",
+      "cells": 3148,
+      "coverage": 0.57,
+      "purity": 0.37918894699266953,
+      "rejection_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "mean_unprojected_mass": 4.45049104752653e-10,
+      "mean_abs_displacement": 0.12393292504514732,
+      "max_abs_displacement": 0.28428093645484953,
+      "position_min": 0.0033444824553519503,
+      "position_max": 0.7157190635451505
+    },
+    {
+      "method": null,
+      "patient": "RU1303",
+      "cells": 658,
+      "coverage": 0.39,
+      "purity": 0.5543990830930258,
+      "rejection_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "mean_unprojected_mass": 1.4652385489381067e-10,
+      "mean_abs_displacement": 0.1310375729970773,
+      "max_abs_displacement": 0.27770010761480624,
+      "position_min": 0.06020066889632107,
+      "position_max": 0.9264214046822742
+    },
+    {
+      "method": null,
+      "patient": "RU1444",
+      "cells": 2623,
+      "coverage": 0.49,
+      "purity": 0.2869367827660053,
+      "rejection_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "mean_unprojected_mass": 1.4621148248469548e-09,
+      "mean_abs_displacement": 0.2138677260533891,
+      "max_abs_displacement": 0.3944682812001169,
+      "position_min": 0.11705685618729096,
+      "position_max": 0.6120401337792643
+    },
+    {
+      "method": null,
+      "patient": "RU151",
+      "cells": 3675,
+      "coverage": 0.52,
+      "purity": 0.43683270091450643,
+      "rejection_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "mean_unprojected_mass": 8.797950617257524e-11,
+      "mean_abs_displacement": 0.06911584352114651,
+      "max_abs_displacement": 0.24749163879598668,
+      "position_min": 0.14381270903010032,
+      "position_max": 0.7525083612040133
+    },
+    {
+      "method": null,
+      "patient": "RU1646",
+      "cells": 173,
+      "coverage": 0.18,
+      "purity": 0.30134608566481624,
+      "rejection_rate": 0.04046242774566474,
+      "unsupported_rate": 0.10404624277456648,
+      "mean_unprojected_mass": 0.10404624277456648,
+      "mean_abs_displacement": 0.06348616664692325,
+      "max_abs_displacement": 0.15680378738133421,
+      "position_min": 0.30770056806603585,
+      "position_max": 0.8614319220027229
+    },
+    {
+      "method": null,
+      "patient": "RU263",
+      "cells": 4543,
+      "coverage": 0.58,
+      "purity": 0.1943521423392937,
+      "rejection_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "mean_unprojected_mass": 7.016408512232849e-19,
+      "mean_abs_displacement": 0.0854437558582565,
+      "max_abs_displacement": 0.3543987348074825,
+      "position_min": 0.32441471571906355,
+      "position_max": 0.9163879598662207
+    },
+    {
+      "method": null,
+      "patient": "RU581",
+      "cells": 14769,
+      "coverage": 0.75,
+      "purity": 0.36804459150380947,
+      "rejection_rate": 0.0,
+      "unsupported_rate": 0.0,
+      "mean_unprojected_mass": 5.002790280353589e-19,
+      "mean_abs_displacement": 0.13567935184737498,
+      "max_abs_displacement": 0.24065420117727246,
+      "position_min": 0.15384615384615385,
+      "position_max": 0.9933110367892977
+    },
+    {
+      "method": null,
+      "patient": "RU831",
+      "cells": 2444,
+      "coverage": 0.37,
+      "purity": 0.42049253382316887,
+      "rejection_rate": 0.0036824877250409165,
+      "unsupported_rate": 0.004091653027823241,
+      "mean_unprojected_mass": 0.004309685324866725,
+      "mean_abs_displacement": 0.040788800992266915,
+      "max_abs_displacement": 0.2859707731919686,
+      "position_min": 0.1806020066889632,
+      "position_max": 1.0
+    },
+    {
+      "method": null,
+      "patient": "RU942",
+      "cells": 2520,
+      "coverage": 0.25,
+      "purity": 0.5057159593036095,
+      "rejection_rate": 0.0011904761904761906,
+      "unsupported_rate": 0.0011904761904761906,
+      "mean_unprojected_mass": 0.0011904771799157508,
+      "mean_abs_displacement": 0.11017570101067066,
+      "max_abs_displacement": 0.2675585284280937,
+      "position_min": 0.0,
+      "position_max": 0.7324414715719063
+    }
+  ],
+  "ru1303": {
+    "LUAD": {
+      "n": 210,
+      "median_position": 0.16938361235244864
+    },
+    "SCLC-A": {
+      "n": 448,
+      "median_position": 0.6994562210713016
+    },
+    "SCLC-N": {
+      "n": 0,
+      "median_position": null
+    },
+    "sclc_a_in_other_sclc_n_q10_q90": 0.9754464285714286
+  },
+  "held_out_marker_agreement": {
+    "available": false,
+    "reason": "All expression genes, including known lineage markers, were supplied to fitting; this cohort has no predeclared held-out marker panel."
+  },
+  "name": "free_warp_raw",
+  "description": "Raw input with 300 consensus coordinates and zero deletion opening cost; isolates the lattice geometry change without a dense preprocessing transform.",
+  "input": "/scratch/chanj3/wangm10/HTAN/results/aligned_scdebussy_preprocessed_v3.h5ad",
+  "requested_config": {
+    "name": "free_warp_raw",
+    "description": "Raw input with 300 consensus coordinates and zero deletion opening cost; isolates the lattice geometry change without a dense preprocessing transform.",
+    "transform": {
+      "patient_gene_center": false,
+      "ru1646_log1p": false
+    },
+    "fit": {
+      "patient_key": "patient",
+      "pseudotime_key": "s_local",
+      "n_landmarks": 100,
+      "consensus_resolution": 300,
+      "landmark_method": "fixed",
+      "locality_radius": 0.1,
+      "beta": 1.0,
+      "mode": "open",
+      "n_min": 5,
+      "epsilon": 1e-06,
+      "kappa_i": 3.0,
+      "kappa_d": 0.0,
+      "calibration_quantile": 0.9,
+      "calibration_band": 0.25,
+      "max_iter": 200,
+      "tol": 1e-06,
+      "patience": 3,
+      "d_min": 0.001,
+      "chunk_size": 1024,
+      "backend": "numba"
+    }
+  },
+  "resolved_fit_config": {
+    "patient_key": "patient",
+    "pseudotime_key": "s_local",
+    "n_landmarks": 100,
+    "landmark_method": "fixed",
+    "consensus_resolution": 300,
+    "discovery_resolution": 401,
+    "discovery_criterion": "density-balanced-standardized-slope-peaks-v1",
+    "locality_radius": 0.1,
+    "beta": 1.0,
+    "mode": "open",
+    "n_min": 5,
+    "epsilon": 1e-06,
+    "eta_i": 9198.986888799282,
+    "eta_d": 9198.986888799282,
+    "kappa_i": 3.0,
+    "kappa_d": 0.0,
+    "lambda_i": 27596.960666397845,
+    "lambda_d": 0.0,
+    "calibration": "band_minimum_quantile",
+    "calibration_quantile": 0.9,
+    "calibration_band": 0.25,
+    "max_iter": 200,
+    "tol": 1e-06,
+    "patience": 3,
+    "d_min": 0.001,
+    "chunk_size": 1024,
+    "backend": "numba"
+  },
+  "converged": true,
+  "iterations": 9,
+  "diagnostics": {
+    "RU1083": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 0.0,
+      "numerical_zero_matches": 28821
+    },
+    "RU263": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 0.007142290472984314,
+      "numerical_zero_matches": 29651
+    },
+    "RU581": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 0.005957033485174179,
+      "numerical_zero_matches": 29223
+    },
+    "RU831": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 2.651593971531838,
+      "numerical_zero_matches": 23800
+    },
+    "RU1646": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 0.010946156922727823,
+      "numerical_zero_matches": 19753
+    },
+    "RU1444": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 0.0,
+      "numerical_zero_matches": 28754
+    },
+    "RU151": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 0.0,
+      "numerical_zero_matches": 29900
+    },
+    "RU1303": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 0.0034646489657461643,
+      "numerical_zero_matches": 29746
+    },
+    "RU942": {
+      "no_match_probability": 0.0,
+      "low_match_probability": 0.0,
+      "unaligned": false,
+      "path_entropy": 4.907049470581114,
+      "numerical_zero_matches": 24220
+    }
+  },
+  "provenance": {
+    "python": "3.11.13",
+    "implementation": "scdebussy.align.v2",
+    "experimental": true,
+    "contract_version": "affine-gap-linear-v2.1",
+    "coordinate_convention": "endpoint-inclusive-local-pseudotime",
+    "projection_basis": "adjacent-linear-supported-v1",
+    "source_sha256": "95ab4c33a0c1d550dab2acaadc9986e034e948dbb6e7bbabaccc048faa0a01ee",
+    "scdebussy": "0.0.1",
+    "numpy": "2.2.6",
+    "scipy": "1.16.3",
+    "numba": "0.61.2",
+    "anndata": "0.12.10"
+  },
+  "seconds": 273.9934275895357
+}
