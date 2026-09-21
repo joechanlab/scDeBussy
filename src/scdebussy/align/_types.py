@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from ._dp import Posterior
+from ._dp import JointPosterior, Posterior
 
 
 class InsufficientSupportError(ValueError):
@@ -91,8 +91,12 @@ class AlignmentResult:
             self.provenance.setdefault("coordinate_convention", "half-open-rank-v2.0")
         self.consensus_coordinates = np.asarray(self.consensus_coordinates, dtype=float).copy()
         axis = self.consensus_coordinates
-        if (axis.shape != (len(self.barycenter),) or not np.isfinite(axis).all()
-                or np.any(np.diff(axis) <= 0) or np.any((axis < 0) | (axis > 1))):
+        if (
+            axis.shape != (len(self.barycenter),)
+            or not np.isfinite(axis).all()
+            or np.any(np.diff(axis) <= 0)
+            or np.any((axis < 0) | (axis > 1))
+        ):
             raise ValueError("consensus_coordinates must be strictly increasing in [0,1] and match barycenter rows")
 
     def write(self, adata, *, namespace="scdebussy_v2"):
@@ -149,17 +153,37 @@ class AlignmentResult:
                 for k, patient in enumerate(self.patients)
             },
             "posterior": {
-                str(k): {
-                    "patient": self.patients[k],
-                    "log_a": p.log_a.copy(),
-                    "log_z": p.log_z,
-                    "insertion": p.insertion.copy(),
-                    "deletion": p.deletion.copy(),
-                    "match_count_probability": p.count_probability.copy(),
-                    "entropy": p.entropy,
-                    "map_edges": p.map_edges.copy(),
-                    "map_energy": p.map_energy,
-                }
+                str(k): (
+                    {
+                        "patient": self.patients[k],
+                        "log_a": p.log_a.copy(),
+                        "log_z": p.log_z,
+                        "patient_occupancy": p.patient_occupancy.copy(),
+                        "consensus_occupancy": p.consensus_occupancy.copy(),
+                        "patient_unmatched_internal": p.patient_unmatched_internal.copy(),
+                        "patient_unmatched_terminal": p.patient_unmatched_terminal.copy(),
+                        "consensus_unmatched_internal": p.consensus_unmatched_internal.copy(),
+                        "consensus_unmatched_terminal": p.consensus_unmatched_terminal.copy(),
+                        "expected_match_11": p.expected_match_11,
+                        "expected_match_12": p.expected_match_12,
+                        "expected_match_21": p.expected_match_21,
+                        "entropy": p.entropy,
+                        "map_edges": p.map_edges.copy(),
+                        "map_energy": p.map_energy,
+                    }
+                    if isinstance(p, JointPosterior)
+                    else {
+                        "patient": self.patients[k],
+                        "log_a": p.log_a.copy(),
+                        "log_z": p.log_z,
+                        "insertion": p.insertion.copy(),
+                        "deletion": p.deletion.copy(),
+                        "match_count_probability": p.count_probability.copy(),
+                        "entropy": p.entropy,
+                        "map_edges": p.map_edges.copy(),
+                        "map_energy": p.map_energy,
+                    }
+                )
                 for k, p in enumerate(self.posteriors)
             },
         }

@@ -206,6 +206,43 @@ class JointPosterior:
         return self.consensus_unmatched_internal + self.consensus_unmatched_terminal
 
 
+def check_joint_invariants(posterior, n, t, atol=1e-4):
+    """Runtime safeguard: the conservation identities from JOINT_WARP_CONTRACT.md Q2.
+
+    Mirrors ``tests/test_v2_joint_warp.py::assert_conservation`` (the algebraic
+    identities, not the edge-flow check, which is test-only diagnostics rather
+    than a per-iteration production safeguard). Raises ``RuntimeError`` rather
+    than asserting, so callers such as ``fit()`` can surface a clear failure
+    instead of an opaque numerical collapse.
+    """
+    for name in (
+        "log_a",
+        "patient_occupancy",
+        "consensus_occupancy",
+        "patient_unmatched_internal",
+        "patient_unmatched_terminal",
+        "consensus_unmatched_internal",
+        "consensus_unmatched_terminal",
+    ):
+        arr = np.asarray(getattr(posterior, name))
+        bad = np.isnan(arr) | (arr == np.inf) if name == "log_a" else ~np.isfinite(arr)
+        if bad.any():
+            raise RuntimeError(f"joint posterior field {name!r} contains NaN/inf values")
+    if not np.isfinite(posterior.log_z):
+        raise RuntimeError("joint posterior log_z is not finite")
+    row_sum = posterior.a.sum(1)
+    if not np.allclose(row_sum + posterior.patient_unmatched, 1.0, atol=atol):
+        raise RuntimeError("joint posterior violates patient occupancy conservation (sum_j A[i,j] + unmatched[i] != 1)")
+    if not np.allclose(posterior.consensus_occupancy + posterior.consensus_unmatched, 1.0, atol=atol):
+        raise RuntimeError("joint posterior violates consensus occupancy conservation (O_j + unmatched[j] != 1)")
+    total_patient = posterior.expected_match_11 + posterior.expected_match_12 + 2 * posterior.expected_match_21
+    if abs(float(posterior.patient_occupancy.sum()) - total_patient) > max(atol, 1e-4 * max(n, 1)):
+        raise RuntimeError("joint posterior violates patient count identity")
+    total_consensus = posterior.expected_match_11 + 2 * posterior.expected_match_12 + posterior.expected_match_21
+    if abs(float(posterior.consensus_occupancy.sum()) - total_consensus) > max(atol, 1e-4 * max(t, 1)):
+        raise RuntimeError("joint posterior violates consensus count identity")
+
+
 def infer_joint(model, *, backend="numba"):
     """Forward/backward inference over the joint warp graph.
 

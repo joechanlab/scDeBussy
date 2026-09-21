@@ -29,6 +29,28 @@ def occupancy_support(posterior):
     return matched, posterior.insertion
 
 
+def consensus_occupancy_support(posterior):
+    """Symmetric counterpart of ``occupancy_support`` for the consensus axis.
+
+    Old-mode ``Posterior``: ``sum_i A[i,j]``/``deletion`` (identical, per Q2).
+    Joint-mode ``JointPosterior``: ``consensus_occupancy``/``consensus_unmatched``
+    directly, since ``sum_i A[:,j]`` is not even guaranteed nonnegative-bounded
+    once (2,1) edges exist (JOINT_WARP_CONTRACT.md Q8).
+    """
+    if isinstance(posterior, JointPosterior):
+        return posterior.consensus_occupancy, posterior.consensus_unmatched
+    matched = np.exp(logsumexp(posterior.log_a, axis=0))
+    return matched, posterior.deletion
+
+
+def _safe_log(x):
+    x = np.asarray(x, dtype=float)
+    out = np.full(x.shape, -np.inf)
+    positive = x > 0
+    out[positive] = np.log(x[positive])
+    return out
+
+
 def interpolation_weights(time, coordinates, radius, support_intervals=None):
     """Nonnegative adjacent-knot basis, separate from expression smoothing.
 
@@ -80,7 +102,13 @@ def project(result, adata=None) -> ProjectionResult:
     reversals = {}
     for lm, posterior in zip(result.landmarks, result.posteriors, strict=True):
         rows = np.flatnonzero(patients == lm.patient)
-        log_m = logsumexp(posterior.log_a, axis=1)
+        if isinstance(posterior, JointPosterior):
+            # Occupancy is the semantic source of truth once (1,2)/(2,1) edges
+            # exist (JOINT_WARP_CONTRACT.md Q7/Q8); numerically identical to
+            # sum_j A[i,j] by construction, but not derived from A here.
+            log_m = _safe_log(posterior.patient_occupancy)
+        else:
+            log_m = logsumexp(posterior.log_a, axis=1)
         valid_landmarks = np.isfinite(log_m)
         position_given_landmark = np.zeros_like(posterior.log_a)
         position_given_landmark[valid_landmarks] = np.exp(
@@ -145,8 +173,12 @@ def summarize(result, projection=None) -> PatientQuantities:
     average, coverage = np.full(n, np.nan), np.zeros(n)
     v = result.consensus_coordinates
     for p, (lm, post) in enumerate(zip(result.landmarks, result.posteriors, strict=True)):
-        log_m = logsumexp(post.log_a, axis=1)
-        log_n = logsumexp(post.log_a, axis=0)
+        if isinstance(post, JointPosterior):
+            log_m = _safe_log(post.patient_occupancy)
+            log_n = _safe_log(post.consensus_occupancy)
+        else:
+            log_m = logsumexp(post.log_a, axis=1)
+            log_n = logsumexp(post.log_a, axis=0)
         mass[p], support[p] = np.exp(log_m), np.exp(log_n)
         rows = np.isfinite(log_m)
         kinetic[p][rows] = np.exp(post.log_a[rows] - log_m[rows, None]) @ v - lm.coordinates[rows]

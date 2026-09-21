@@ -6,8 +6,8 @@ normalized; gap probabilities conflate unmatched material and resampling.
 
 from ._api import fit
 from ._compare import compare
-from ._dp import Posterior, infer
-from ._model import LatticeModel, NoValidPathError, enumerate_paths
+from ._dp import JointPosterior, Posterior, check_joint_invariants, infer, infer_joint
+from ._model import LatticeModel, NoValidPathError, enumerate_joint_paths, enumerate_paths
 from ._project import PatientQuantities, project, summarize
 from ._simulate import SimulationConfig, nonidentifiable_pair, simulate
 from ._types import (
@@ -25,9 +25,13 @@ __all__ = [
     "compare",
     "summarize",
     "infer",
+    "infer_joint",
+    "check_joint_invariants",
     "enumerate_paths",
+    "enumerate_joint_paths",
     "LatticeModel",
     "Posterior",
+    "JointPosterior",
     "AlignmentResult",
     "ProjectionResult",
     "ComparisonResult",
