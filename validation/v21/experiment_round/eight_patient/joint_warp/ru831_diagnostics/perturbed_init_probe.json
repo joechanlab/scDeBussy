@@ -1,0 +1,66 @@
+{
+  "patients": {
+    "RU831": {
+      "baseline_mean_displacement": 0.11500532890828201,
+      "perturbed_mean_displacement": 0.11500534590414224,
+      "baseline_path_entropy": 133.70337623150604,
+      "perturbed_path_entropy": 133.7033753096744,
+      "baseline_expected_match_11": 25.52309157465887,
+      "perturbed_expected_match_11": 25.52309149277817
+    },
+    "RU1303": {
+      "baseline_mean_displacement": 0.0130633722910666,
+      "perturbed_mean_displacement": 0.013063393738360051,
+      "baseline_path_entropy": 148.7472738424819,
+      "perturbed_path_entropy": 148.74727353865973,
+      "baseline_expected_match_11": 31.305215375235527,
+      "perturbed_expected_match_11": 31.305215315141965
+    },
+    "RU1444": {
+      "baseline_mean_displacement": 0.0036375359458674077,
+      "perturbed_mean_displacement": 0.0036375409119977285,
+      "baseline_path_entropy": 143.92360923923695,
+      "perturbed_path_entropy": 143.92360935417975,
+      "baseline_expected_match_11": 32.27263344083396,
+      "perturbed_expected_match_11": 32.27263341108147
+    },
+    "RU581": {
+      "baseline_mean_displacement": 0.016962235194717633,
+      "perturbed_mean_displacement": 0.016962238559450244,
+      "baseline_path_entropy": 144.66516944004525,
+      "perturbed_path_entropy": 144.6651694705239,
+      "baseline_expected_match_11": 32.101961027566944,
+      "perturbed_expected_match_11": 32.10196099655083
+    }
+  },
+  "baseline_converged": true,
+  "perturbed_converged": true,
+  "baseline_iterations": 7,
+  "perturbed_iterations": 7,
+  "baseline_final_history_entry": {
+    "iteration": 7,
+    "free_energy_before": -501.4805056275813,
+    "free_energy_conditional": -501.48050682849924,
+    "free_energy": -501.4805072749139,
+    "relative_improvement": 3.2849385082813596e-09,
+    "barycenter_change": 0.0005273066010782479,
+    "e11_mass": 245.0696062689384,
+    "warp_mass": 264.6573053173163,
+    "internal_unmatched_mass": 173.81526835660628,
+    "terminal_unmatched_mass": 4.43685310232496,
+    "consensus_dominance": 0.12937341702611696
+  },
+  "perturbed_final_history_entry": {
+    "iteration": 7,
+    "free_energy_before": -501.4805056322498,
+    "free_energy_conditional": -501.4805068298632,
+    "free_energy": -501.4805072753107,
+    "relative_improvement": 3.276420278656619e-09,
+    "barycenter_change": 0.000528190114935434,
+    "e11_mass": 245.0696062414984,
+    "warp_mass": 264.6573054426809,
+    "internal_unmatched_mass": 173.8152680824542,
+    "terminal_unmatched_mass": 4.43685298032416,
+    "consensus_dominance": 0.12937341695629775
+  }
+}

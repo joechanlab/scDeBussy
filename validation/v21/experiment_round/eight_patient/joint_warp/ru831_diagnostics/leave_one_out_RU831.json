@@ -1,0 +1,32 @@
+{
+  "full_n_patients": 8,
+  "loo_n_patients": 7,
+  "full_barycenter_shape": [
+    100,
+    250
+  ],
+  "loo_barycenter_shape": [
+    100,
+    250
+  ],
+  "same_shape": true,
+  "region_n_full": 27,
+  "region_n_loo": 27,
+  "overall_relative_barycenter_shift": 0.057431708477992435,
+  "region_0.65_0.92_relative_barycenter_shift": 0.06285451222507281,
+  "region_vs_overall_ratio": 1.094421773107418,
+  "other_patient_mean_displacement": {
+    "RU1303": {
+      "with_RU831": 0.0130633722910666,
+      "without_RU831": 0.0064326314201815895
+    },
+    "RU1444": {
+      "with_RU831": 0.0036375359458674077,
+      "without_RU831": 0.004490426104618944
+    },
+    "RU581": {
+      "with_RU831": 0.016962235194717633,
+      "without_RU831": 0.019260374172365823
+    }
+  }
+}

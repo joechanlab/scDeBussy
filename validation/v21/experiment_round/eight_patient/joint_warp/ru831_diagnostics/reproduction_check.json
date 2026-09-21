@@ -77,6 +77,32 @@
         "abs_diff": 0.0,
         "within_tol": true
       }
+    },
+    "RU581": {
+      "path_entropy": {
+        "cached": 144.66516944004525,
+        "refit": 144.66516944004525,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_11": {
+        "cached": 32.101961027566944,
+        "refit": 32.101961027566944,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_12": {
+        "cached": 18.610791640107134,
+        "refit": 18.610791640107134,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_21": {
+        "cached": 16.047576524805596,
+        "refit": 16.047576524805596,
+        "abs_diff": 0.0,
+        "within_tol": true
+      }
     }
   },
   "severe_o0.02_teq": {
@@ -154,6 +180,32 @@
       "expected_match_21": {
         "cached": 16.862195909717293,
         "refit": 16.862195909717293,
+        "abs_diff": 0.0,
+        "within_tol": true
+      }
+    },
+    "RU581": {
+      "path_entropy": {
+        "cached": 143.5985582200437,
+        "refit": 143.5985582200437,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_11": {
+        "cached": 30.997580707309435,
+        "refit": 30.997580707309435,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_12": {
+        "cached": 19.15617232678398,
+        "refit": 19.15617232678398,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_21": {
+        "cached": 16.58248921195066,
+        "refit": 16.58248921195066,
         "abs_diff": 0.0,
         "within_tol": true
       }
