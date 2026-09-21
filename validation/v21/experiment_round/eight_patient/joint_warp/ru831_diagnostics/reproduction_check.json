@@ -1,0 +1,162 @@
+{
+  "moderate_o0.1_teq": {
+    "RU831": {
+      "path_entropy": {
+        "cached": 133.70337623150604,
+        "refit": 133.70337623150604,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_11": {
+        "cached": 25.52309157465887,
+        "refit": 25.52309157465887,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_12": {
+        "cached": 20.07448249077077,
+        "refit": 20.07448249077077,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_21": {
+        "cached": 8.443478399532305,
+        "refit": 8.443478399532305,
+        "abs_diff": 0.0,
+        "within_tol": true
+      }
+    },
+    "RU1303": {
+      "path_entropy": {
+        "cached": 148.7472738424819,
+        "refit": 148.7472738424819,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_11": {
+        "cached": 31.305215375235527,
+        "refit": 31.305215375235527,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_12": {
+        "cached": 19.039397869658824,
+        "refit": 19.039397869658824,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_21": {
+        "cached": 14.477623523845887,
+        "refit": 14.477623523845887,
+        "abs_diff": 0.0,
+        "within_tol": true
+      }
+    },
+    "RU1444": {
+      "path_entropy": {
+        "cached": 143.92360923923695,
+        "refit": 143.92360923923695,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_11": {
+        "cached": 32.27263344083396,
+        "refit": 32.27263344083396,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_12": {
+        "cached": 18.543728644103588,
+        "refit": 18.543728644103588,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_21": {
+        "cached": 16.32667842928601,
+        "refit": 16.32667842928601,
+        "abs_diff": 0.0,
+        "within_tol": true
+      }
+    }
+  },
+  "severe_o0.02_teq": {
+    "RU831": {
+      "path_entropy": {
+        "cached": 132.66571441782958,
+        "refit": 132.66571441782958,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_11": {
+        "cached": 24.684585500004548,
+        "refit": 24.684585500004548,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_12": {
+        "cached": 20.78633327655068,
+        "refit": 20.78633327655068,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_21": {
+        "cached": 8.700905232373279,
+        "refit": 8.700905232373279,
+        "abs_diff": 0.0,
+        "within_tol": true
+      }
+    },
+    "RU1303": {
+      "path_entropy": {
+        "cached": 147.66597523671408,
+        "refit": 147.66597523671408,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_11": {
+        "cached": 30.26511772253202,
+        "refit": 30.26511772253202,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_12": {
+        "cached": 19.603861141671995,
+        "refit": 19.603861141671995,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_21": {
+        "cached": 15.004529579627404,
+        "refit": 15.004529579627404,
+        "abs_diff": 0.0,
+        "within_tol": true
+      }
+    },
+    "RU1444": {
+      "path_entropy": {
+        "cached": 142.86310183321612,
+        "refit": 142.86310183321612,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_11": {
+        "cached": 31.156463993667664,
+        "refit": 31.156463993667664,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_12": {
+        "cached": 19.086181510176054,
+        "refit": 19.086181510176054,
+        "abs_diff": 0.0,
+        "within_tol": true
+      },
+      "expected_match_21": {
+        "cached": 16.862195909717293,
+        "refit": 16.862195909717293,
+        "abs_diff": 0.0,
+        "within_tol": true
+      }
+    }
+  }
+}

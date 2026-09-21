@@ -1,0 +1,72 @@
+{
+  "moderate_o0.1_teq": {
+    "RU831": {
+      "mean_row_entropy": 2.7523365658094505,
+      "median_row_entropy": 2.922709792736976,
+      "max_row_entropy": 3.033166528546948,
+      "n_multimodal_rows": 0,
+      "n_matchable_rows": 80,
+      "frac_multimodal_rows": 0.0,
+      "map_vs_mean_mean_abs_diff": 0.004868432963414612,
+      "map_vs_mean_max_abs_diff": 0.014132153854207297,
+      "map_vs_mean_frac_large_disagreement_gt_0.05": 0.0
+    },
+    "RU1303": {
+      "mean_row_entropy": 2.6385699215176834,
+      "median_row_entropy": 2.799145585562511,
+      "max_row_entropy": 2.906088093533313,
+      "n_multimodal_rows": 0,
+      "n_matchable_rows": 100,
+      "frac_multimodal_rows": 0.0,
+      "map_vs_mean_mean_abs_diff": 0.003451990753408155,
+      "map_vs_mean_max_abs_diff": 0.013183656225494287,
+      "map_vs_mean_frac_large_disagreement_gt_0.05": 0.0
+    },
+    "RU1444": {
+      "mean_row_entropy": 2.6204342112884778,
+      "median_row_entropy": 2.7930960959765896,
+      "max_row_entropy": 2.9179947410018943,
+      "n_multimodal_rows": 0,
+      "n_matchable_rows": 100,
+      "frac_multimodal_rows": 0.0,
+      "map_vs_mean_mean_abs_diff": 0.0034720471450864843,
+      "map_vs_mean_max_abs_diff": 0.012705111552104563,
+      "map_vs_mean_frac_large_disagreement_gt_0.05": 0.0
+    }
+  },
+  "severe_o0.02_teq": {
+    "RU831": {
+      "mean_row_entropy": 2.7428250504317133,
+      "median_row_entropy": 2.912446852157542,
+      "max_row_entropy": 3.023592144076659,
+      "n_multimodal_rows": 0,
+      "n_matchable_rows": 80,
+      "frac_multimodal_rows": 0.0,
+      "map_vs_mean_mean_abs_diff": 0.004846072607381441,
+      "map_vs_mean_max_abs_diff": 0.013878113369194728,
+      "map_vs_mean_frac_large_disagreement_gt_0.05": 0.0
+    },
+    "RU1303": {
+      "mean_row_entropy": 2.630329311103529,
+      "median_row_entropy": 2.7902433186932614,
+      "max_row_entropy": 2.897405987944686,
+      "n_multimodal_rows": 0,
+      "n_matchable_rows": 100,
+      "frac_multimodal_rows": 0.0,
+      "map_vs_mean_mean_abs_diff": 0.003334810213072591,
+      "map_vs_mean_max_abs_diff": 0.01309823626415388,
+      "map_vs_mean_frac_large_disagreement_gt_0.05": 0.0
+    },
+    "RU1444": {
+      "mean_row_entropy": 2.6144203317313304,
+      "median_row_entropy": 2.7866656113754065,
+      "max_row_entropy": 2.9114516891318685,
+      "n_multimodal_rows": 0,
+      "n_matchable_rows": 100,
+      "frac_multimodal_rows": 0.0,
+      "map_vs_mean_mean_abs_diff": 0.003467191156808069,
+      "map_vs_mean_max_abs_diff": 0.012646329961730091,
+      "map_vs_mean_frac_large_disagreement_gt_0.05": 0.0
+    }
+  }
+}
