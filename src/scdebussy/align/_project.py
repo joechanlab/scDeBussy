@@ -5,8 +5,28 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.special import logsumexp, xlogy
 
+from ._dp import JointPosterior
 from ._landmarks import validate_adata
 from ._types import ProjectionResult
+
+
+def occupancy_support(posterior):
+    """Return (matched_occupancy, unmatched) for either posterior type.
+
+    Old-mode ``Posterior``: derived from ``A`` (``sum_j A[i,j]``), matching its
+    existing conservation identity. Joint-mode ``JointPosterior``: read directly
+    from the named occupancy fields (``patient_occupancy``/``patient_unmatched``),
+    per JOINT_WARP_CONTRACT.md Q1/Q3/Q7 (they are numerically identical to the
+    ``A``-derived quantity by construction, but occupancy is the semantic source
+    of truth once (1,2)/(2,1) edges exist). This is a single call site for
+    future (Phase 3) wiring of joint-mode results into ``project``/``summarize``;
+    it is not itself wired into those functions yet, since no ``AlignmentResult``
+    in the current API can carry a ``JointPosterior``.
+    """
+    if isinstance(posterior, JointPosterior):
+        return posterior.patient_occupancy, posterior.patient_unmatched
+    matched = np.exp(logsumexp(posterior.log_a, axis=1))
+    return matched, posterior.insertion
 
 
 def interpolation_weights(time, coordinates, radius, support_intervals=None):
@@ -20,7 +40,7 @@ def interpolation_weights(time, coordinates, radius, support_intervals=None):
     time, coordinates = np.asarray(time), np.asarray(coordinates)
     weights = np.zeros((len(time), len(coordinates)))
     right = np.searchsorted(coordinates, time)
-    exact = (right < len(coordinates)) & (coordinates[np.minimum(right, len(coordinates)-1)] == time)
+    exact = (right < len(coordinates)) & (coordinates[np.minimum(right, len(coordinates) - 1)] == time)
     weights[np.flatnonzero(exact), right[exact]] = 1.0
     inside = (~exact) & (right > 0) & (right < len(coordinates))
     rows = np.flatnonzero(inside)
@@ -34,8 +54,7 @@ def interpolation_weights(time, coordinates, radius, support_intervals=None):
         allowed = np.zeros(len(time), bool)
         for lo, high in support_intervals:
             knots_inside = (coordinates >= lo) & (coordinates <= high)
-            allowed |= ((time >= lo) & (time <= high)
-                        & ~np.any((weights > 0) & ~knots_inside, axis=1))
+            allowed |= (time >= lo) & (time <= high) & ~np.any((weights > 0) & ~knots_inside, axis=1)
         weights[~allowed] = 0
     return weights
 
@@ -70,7 +89,9 @@ def project(result, adata=None) -> ProjectionResult:
         for start in range(0, len(rows), result.config["chunk_size"]):
             ix = rows[start : start + result.config["chunk_size"]]
             normalized = interpolation_weights(
-                time[ix], lm.coordinates, result.config["locality_radius"],
+                time[ix],
+                lm.coordinates,
+                result.config["locality_radius"],
                 getattr(lm, "support_intervals", None),
             )
             log_r = np.full_like(normalized, -np.inf)
