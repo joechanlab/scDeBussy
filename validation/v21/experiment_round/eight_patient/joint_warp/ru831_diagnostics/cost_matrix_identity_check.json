@@ -1,0 +1,17 @@
+{
+  "RU831": {
+    "same_shape": true,
+    "max_abs_diff": 0.43602211321433515,
+    "max_abs_diff_relative_to_median_cost": 0.6374240502635651
+  },
+  "RU1303": {
+    "same_shape": true,
+    "max_abs_diff": 0.02438474888439679,
+    "max_abs_diff_relative_to_median_cost": 0.047812824572910674
+  },
+  "RU1444": {
+    "same_shape": true,
+    "max_abs_diff": 0.022612721581211526,
+    "max_abs_diff_relative_to_median_cost": 0.07929921918819441
+  }
+}
