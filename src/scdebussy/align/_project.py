@@ -9,6 +9,8 @@ from ._dp import JointPosterior
 from ._landmarks import validate_adata
 from ._types import ProjectionResult
 
+MIN_RESIDUAL_CORRESPONDENCE_MASS = 1e-12
+
 
 def occupancy_support(posterior):
     """Return (matched_occupancy, unmatched) for either posterior type.
@@ -176,9 +178,14 @@ def summarize(result, projection=None) -> PatientQuantities:
         if isinstance(post, JointPosterior):
             log_m = _safe_log(post.patient_occupancy)
             log_n = _safe_log(post.consensus_occupancy)
+            # O_j measures matched occupancy, whereas a (2,1) edge contributes
+            # two correspondence weights to one consensus state. Expression
+            # means must use the column sum of A, not O_j.
+            log_expression_mass = logsumexp(post.log_a, axis=0)
         else:
             log_m = logsumexp(post.log_a, axis=1)
             log_n = logsumexp(post.log_a, axis=0)
+            log_expression_mass = log_n
         mass[p], support[p] = np.exp(log_m), np.exp(log_n)
         rows = np.isfinite(log_m)
         kinetic[p][rows] = np.exp(post.log_a[rows] - log_m[rows, None]) @ v - lm.coordinates[rows]
@@ -199,8 +206,18 @@ def summarize(result, projection=None) -> PatientQuantities:
             if np.isfinite(logsumexp(log_weights)):
                 average[p] = np.exp(log_weights - logsumexp(log_weights)) @ kinetic[p][rows]
             matched[p] = np.exp(log_n - logsumexp(log_n))
-        cols = np.isfinite(log_n)
-        residual[p, cols] = np.exp(post.log_a[:, cols] - log_n[None, cols]).T @ lm.expression - result.barycenter[cols]
+        # Leave residual undefined when correspondence mass is absent or too
+        # small for a meaningful conditional expression mean. Old mode keeps
+        # its original finite-mass behavior exactly.
+        cols = (
+            log_expression_mass >= np.log(MIN_RESIDUAL_CORRESPONDENCE_MASS)
+            if isinstance(post, JointPosterior)
+            else np.isfinite(log_n)
+        )
+        residual[p, cols] = (
+            np.exp(post.log_a[:, cols] - log_expression_mass[None, cols]).T @ lm.expression
+            - result.barycenter[cols]
+        )
         ix = np.flatnonzero(projection.patients == lm.patient)
         if len(ix):
             logs = projection.log_retained[ix]

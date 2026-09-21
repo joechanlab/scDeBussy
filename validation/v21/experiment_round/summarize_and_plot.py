@@ -153,7 +153,7 @@ def main():
         configs[name] = cfg
     fields = sorted({key for row in all_rows for key in row})
     with (args.output_dir / "metrics.csv").open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
         writer.writeheader(); writer.writerows(all_rows)
     (args.output_dir / "configurations.json").write_text(json.dumps(configs, indent=2) + "\n")
     cmap = LinearSegmentedColormap.from_list("types", [COLORS[x] for x in TYPES])

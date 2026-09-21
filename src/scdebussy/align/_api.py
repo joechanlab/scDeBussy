@@ -312,7 +312,7 @@ def fit(
         for lm, p in zip(landmarks, posterior, strict=True):
             terminal_mass = float(p.patient_unmatched_terminal.sum())
             all_terminal_dominant = terminal_mass > 0.9 * max(len(lm.coordinates), 1)
-            endpoint_pileup = (
+            endpoint_occupancy = (
                 float(p.consensus_occupancy[0] + p.consensus_occupancy[-1]) if len(p.consensus_occupancy) else 0.0
             )
             share = float(np.mean(p.consensus_occupancy / np.maximum(total_occupancy, 1e-12)))
@@ -327,7 +327,7 @@ def fit(
                 "patient_unmatched_terminal_mass": terminal_mass,
                 "consensus_unmatched_internal_mass": float(p.consensus_unmatched_internal.sum()),
                 "consensus_unmatched_terminal_mass": float(p.consensus_unmatched_terminal.sum()),
-                "endpoint_pileup": endpoint_pileup,
+                "endpoint_occupancy": endpoint_occupancy,
                 "consensus_share": share,
                 "degenerate_all_gap_risk": bool(all_terminal_dominant),
             }

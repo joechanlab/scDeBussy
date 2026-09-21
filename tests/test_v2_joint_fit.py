@@ -173,7 +173,7 @@ def test_joint_mode_diagnostics_and_history_fields(warp_fits):
             "patient_unmatched_terminal_mass",
             "consensus_unmatched_internal_mass",
             "consensus_unmatched_terminal_mass",
-            "endpoint_pileup",
+            "endpoint_occupancy",
             "consensus_share",
             "degenerate_all_gap_risk",
             "mean_displacement",
@@ -181,6 +181,11 @@ def test_joint_mode_diagnostics_and_history_fields(warp_fits):
             "p95_displacement",
         ):
             assert key in d
+        assert "endpoint_pileup" not in d
+        posterior = on.posteriors[on.patients.index(patient)]
+        assert d["endpoint_occupancy"] == pytest.approx(
+            posterior.consensus_occupancy[0] + posterior.consensus_occupancy[-1]
+        )
         assert "no_match_probability" not in d  # old-mode-only, deliberately not extended
     for row in on.history[:-1]:
         for key in ("barycenter_change", "e11_mass", "warp_mass", "internal_unmatched_mass", "terminal_unmatched_mass"):
