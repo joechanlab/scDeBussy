@@ -1,0 +1,106 @@
+{
+  "Unaligned input ($s_{local}$)": {
+    "input": "/scratch/chanj3/wangm10/HTAN/results/aligned_scdebussy_preprocessed_v2_ru942_deg_all.h5ad"
+  },
+  "original_v2": {
+    "name": "original_v2",
+    "description": "Eight-patient original v2 with fixed landmarks and unchanged input expression.",
+    "transform": {
+      "patient_gene_center": false
+    },
+    "fit": {
+      "patient_key": "patient",
+      "pseudotime_key": "s_local",
+      "n_landmarks": 100,
+      "consensus_resolution": 100,
+      "landmark_method": "fixed",
+      "locality_radius": 0.1,
+      "beta": 1.0,
+      "mode": "open",
+      "n_min": 5,
+      "epsilon": 1e-06,
+      "kappa_i": 3.0,
+      "kappa_d": 3.0,
+      "calibration_quantile": 0.9,
+      "calibration_band": 0.25,
+      "max_iter": 200,
+      "tol": 1e-06,
+      "patience": 3,
+      "d_min": 0.001,
+      "chunk_size": 1024,
+      "backend": "numba"
+    }
+  },
+  "trajectory_250": {
+    "name": "trajectory_250",
+    "description": "Top 250 label-free recurrent trajectory genes, restricted warp",
+    "transform": {
+      "genes_file": "validation/v21/experiment_round/eight_patient/feature_selection/top_250.json",
+      "patient_gene_center": false
+    },
+    "fit": {
+      "patient_key": "patient",
+      "pseudotime_key": "s_local",
+      "n_landmarks": 100,
+      "consensus_resolution": 100,
+      "landmark_method": "fixed",
+      "locality_radius": 0.1,
+      "beta": 1.0,
+      "mode": "open",
+      "n_min": 5,
+      "epsilon": 1e-06,
+      "kappa_i": 3.0,
+      "kappa_d": 3.0,
+      "calibration_quantile": 0.9,
+      "calibration_band": 0.25,
+      "max_iter": 200,
+      "tol": 1e-06,
+      "patience": 3,
+      "d_min": 0.001,
+      "chunk_size": 1024,
+      "backend": "numba"
+    }
+  },
+  "joint_warp_o0.1_teq": {
+    "name": "joint_warp_o0.1_teq",
+    "description": "Joint posterior-warp: omega_warp=0.1, lambda_terminal_gap=1.5507539330290832 (eq vs internal lambda_i~1.551), trajectory-250 unit precision base",
+    "transform": {
+      "genes_file": "validation/v21/experiment_round/eight_patient/feature_selection/top_250.json",
+      "patient_gene_center": false
+    },
+    "fit": {
+      "patient_key": "patient",
+      "pseudotime_key": "s_local",
+      "n_landmarks": 100,
+      "consensus_resolution": 100,
+      "landmark_method": "fixed",
+      "locality_radius": 0.1,
+      "beta": 1.0,
+      "mode": "open",
+      "n_min": 5,
+      "epsilon": 1e-06,
+      "kappa_i": 3.0,
+      "kappa_d": 3.0,
+      "calibration_quantile": 0.9,
+      "calibration_band": 0.25,
+      "max_iter": 200,
+      "tol": 1e-06,
+      "patience": 3,
+      "d_min": 0.001,
+      "chunk_size": 1024,
+      "backend": "numba",
+      "precision_mode": "unit",
+      "warp": "on",
+      "omega_warp": 0.1,
+      "lambda_terminal_gap": 1.5507539330290832
+    }
+  },
+  "dtw_omega_0.06_terminal_1": {
+    "name": "dtw_omega_0.06_terminal_1",
+    "type": "fixed-consensus Viterbi prototype",
+    "omega": 0.06,
+    "internal_cost": 1.0,
+    "terminal_cost": 1.0,
+    "base_fit": "validation/v21/experiment_round/eight_patient/results/trajectory_250_unit.npz"
+  }
+}
