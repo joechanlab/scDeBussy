@@ -1,0 +1,14 @@
+{
+  "s_local": {
+    "mean_gene_concordance": 0.4210611179709765,
+    "mean_peak_spread": 0.5351089588377724
+  },
+  "joint_nowarp_teq": {
+    "mean_gene_concordance": 0.42854934569307873,
+    "mean_peak_spread": 0.5133171912832931
+  },
+  "joint_nowarp_tlow": {
+    "mean_gene_concordance": 0.42908340023960895,
+    "mean_peak_spread": 0.5133171912832931
+  }
+}

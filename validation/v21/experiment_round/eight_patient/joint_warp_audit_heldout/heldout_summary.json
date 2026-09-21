@@ -1,0 +1,34 @@
+{
+  "s_local": {
+    "mean_gene_concordance": 0.4210611179709765,
+    "mean_peak_spread": 0.5351089588377724
+  },
+  "trajectory_250_unit": {
+    "mean_gene_concordance": 0.4330413170505195,
+    "mean_peak_spread": 0.5133171912832931
+  },
+  "joint_warp_o0.02_teq": {
+    "mean_gene_concordance": 0.4258533553506489,
+    "mean_peak_spread": 0.5084745762711864
+  },
+  "joint_warp_o0.02_tlow": {
+    "mean_gene_concordance": 0.4260472312822678,
+    "mean_peak_spread": 0.5084745762711864
+  },
+  "joint_warp_o0.05_teq": {
+    "mean_gene_concordance": 0.42584760494180435,
+    "mean_peak_spread": 0.5084745762711864
+  },
+  "joint_warp_o0.05_tlow": {
+    "mean_gene_concordance": 0.4260490793084209,
+    "mean_peak_spread": 0.5060532687651331
+  },
+  "joint_warp_o0.1_teq": {
+    "mean_gene_concordance": 0.4258443861633515,
+    "mean_peak_spread": 0.5084745762711864
+  },
+  "joint_warp_o0.1_tlow": {
+    "mean_gene_concordance": 0.42603983648231647,
+    "mean_peak_spread": 0.5060532687651331
+  }
+}
