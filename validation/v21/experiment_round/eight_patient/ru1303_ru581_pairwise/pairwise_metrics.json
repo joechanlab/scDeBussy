@@ -1,0 +1,206 @@
+{
+  "raw": {
+    "method": "raw_s_local",
+    "native_total_cost": 83.837477576188,
+    "matched_expression_cost": 83.837477576188,
+    "matched_span_ru1303": [
+      0,
+      99
+    ],
+    "matched_span_ru581": [
+      0,
+      99
+    ],
+    "ru1303_unmatched_begin_fraction": 0.0,
+    "ru1303_unmatched_end_fraction": 0.0,
+    "ru581_unmatched_begin_fraction": 0.0,
+    "ru581_unmatched_end_fraction": 0.0,
+    "warp_stretch_moves": 0,
+    "warp_compression_moves": 0,
+    "ordinary_11_moves": 99,
+    "internal_patient_gap_skips": 0,
+    "internal_ru581_gap_skips": 0,
+    "terminal_patient_skips": 0,
+    "terminal_ru581_skips": 0,
+    "ru1303_cell_mapped_fraction": 1.0,
+    "mean_cell_displacement": 0.0,
+    "max_cell_displacement": 0.0,
+    "ru1303_sclc_a_overlap_ru581_sclc_n_q10_q90": 0.9151785714285714,
+    "ru1303_sclc_a_median_on_ru581": 0.7496426322210147,
+    "late_80_99_ru581_range": [
+      0.8080808080808082,
+      1.0
+    ],
+    "longest_exact_plateau_landmarks": 1,
+    "heldout_marker_late_standardized_mse": 3.0656692406332624
+  },
+  "v2": {
+    "method": "v2_pairwise_MAP",
+    "native_total_cost": 77.99161738233437,
+    "matched_expression_cost": 46.9765387217527,
+    "matched_span_ru1303": [
+      25,
+      94
+    ],
+    "matched_span_ru581": [
+      0,
+      69
+    ],
+    "ru1303_unmatched_begin_fraction": 0.25,
+    "ru1303_unmatched_end_fraction": 0.05,
+    "ru581_unmatched_begin_fraction": 0.0,
+    "ru581_unmatched_end_fraction": 0.3,
+    "warp_stretch_moves": 0,
+    "warp_compression_moves": 0,
+    "ordinary_11_moves": 69,
+    "internal_patient_gap_skips": 0,
+    "internal_ru581_gap_skips": 0,
+    "terminal_patient_skips": 30,
+    "terminal_ru581_skips": 30,
+    "posterior_free_energy": 9.576276129404356,
+    "expected_patient_gap_count": 51.301830728379485,
+    "expected_reference_gap_count": 51.3018307283795,
+    "posterior_support_late_80_99": [
+      0.4210708664011021,
+      0.4440273482570687,
+      0.46032871348040966,
+      0.4693437903163386,
+      0.46914714409421354,
+      0.46507572748216397,
+      0.4644111329095628,
+      0.45669223631010586,
+      0.4480609186412062,
+      0.4413133580671531,
+      0.4362427822498982,
+      0.429717172786158,
+      0.42430501781251667,
+      0.4198861927539319,
+      0.41469644767695146,
+      0.40842858855645425,
+      0.4001310755310748,
+      0.3874238974570751,
+      0.3596758503946818,
+      0.28144862172785434
+    ],
+    "ru1303_cell_mapped_fraction": 1.0,
+    "mean_cell_displacement": 0.03841794774031321,
+    "max_cell_displacement": 0.06740378896206534,
+    "ru1303_sclc_a_overlap_ru581_sclc_n_q10_q90": 0.5200892857142857,
+    "ru1303_sclc_a_median_on_ru581": 0.7104730789946785,
+    "late_80_99_ru581_range": [
+      0.7650885379421395,
+      0.9699121585933103
+    ],
+    "longest_exact_plateau_landmarks": 1,
+    "heldout_marker_late_standardized_mse": 2.5647423345083458
+  },
+  "dtw_band_20": {
+    "method": "dtw_band_20",
+    "native_total_cost": 74.86129216886879,
+    "matched_expression_cost": 74.86129216886877,
+    "matched_span_ru1303": [
+      0,
+      99
+    ],
+    "matched_span_ru581": [
+      20,
+      80
+    ],
+    "ru1303_unmatched_begin_fraction": 0.0,
+    "ru1303_unmatched_end_fraction": 0.0,
+    "ru581_unmatched_begin_fraction": 0.2,
+    "ru581_unmatched_end_fraction": 0.19,
+    "warp_stretch_moves": 53,
+    "warp_compression_moves": 14,
+    "ordinary_11_moves": 32,
+    "internal_patient_gap_skips": 0,
+    "internal_ru581_gap_skips": 0,
+    "terminal_patient_skips": 0,
+    "terminal_ru581_skips": 39,
+    "native_normalized_cost": 0.7486129216886879,
+    "reachability_note": "original 0.2 band",
+    "ru1303_cell_mapped_fraction": 1.0,
+    "mean_cell_displacement": 0.14263864858320843,
+    "max_cell_displacement": 0.20202020202020204,
+    "ru1303_sclc_a_overlap_ru581_sclc_n_q10_q90": 0.13169642857142858,
+    "ru1303_sclc_a_median_on_ru581": 0.6262626262626263,
+    "late_80_99_ru581_range": [
+      0.6262626262626263,
+      0.8080808080808082
+    ],
+    "longest_exact_plateau_landmarks": 39,
+    "heldout_marker_late_standardized_mse": 1.210404700482892
+  },
+  "dtw_band_60": {
+    "method": "dtw_band_60",
+    "native_total_cost": 67.94459238317363,
+    "matched_expression_cost": 67.94459238317363,
+    "matched_span_ru1303": [
+      0,
+      99
+    ],
+    "matched_span_ru581": [
+      20,
+      41
+    ],
+    "ru1303_unmatched_begin_fraction": 0.0,
+    "ru1303_unmatched_end_fraction": 0.0,
+    "ru581_unmatched_begin_fraction": 0.2,
+    "ru581_unmatched_end_fraction": 0.58,
+    "warp_stretch_moves": 85,
+    "warp_compression_moves": 7,
+    "ordinary_11_moves": 7,
+    "internal_patient_gap_skips": 0,
+    "internal_ru581_gap_skips": 0,
+    "terminal_patient_skips": 0,
+    "terminal_ru581_skips": 78,
+    "native_normalized_cost": 0.6794459238317363,
+    "reachability_note": "single widened-band reachability check",
+    "ru1303_cell_mapped_fraction": 1.0,
+    "mean_cell_displacement": 0.2948706427419946,
+    "max_cell_displacement": 0.5858585858585859,
+    "ru1303_sclc_a_overlap_ru581_sclc_n_q10_q90": 0.0,
+    "ru1303_sclc_a_median_on_ru581": 0.4141414141414142,
+    "late_80_99_ru581_range": [
+      0.4141414141414142,
+      0.4141414141414142
+    ],
+    "longest_exact_plateau_landmarks": 39,
+    "heldout_marker_late_standardized_mse": 1.1144831421091204
+  },
+  "reference": {
+    "ru581_sclc_a_q10_median_q90": [
+      0.42105098708711675,
+      0.4798924487514517,
+      0.531486403014787
+    ],
+    "ru581_sclc_n_q10_median_q90": [
+      0.7093360602496913,
+      0.9202509915091954,
+      1.0
+    ],
+    "ru1303_sclc_a_q10_median_q90": [
+      0.7134682866410749,
+      0.7496426322210147,
+      0.9553981693943414
+    ],
+    "heldout_markers": [
+      "ASCL1",
+      "NEUROD1",
+      "INSM1",
+      "CHGA",
+      "CHGB",
+      "NCAM1",
+      "DLL3"
+    ],
+    "cost": "mean squared expression difference over frozen trajectory-250 genes, unit precision",
+    "v2_parameters": {
+      "beta": 1.0,
+      "eta_i": 0.516917977676361,
+      "eta_d": 0.516917977676361,
+      "lambda_i": 1.5507539330290832,
+      "lambda_d": 1.5507539330290832,
+      "mode": "open"
+    }
+  }
+}
