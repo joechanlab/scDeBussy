@@ -62,7 +62,10 @@ def main():
     assert not set(MARKERS).intersection(panel)
     names = fit["patient_order"].tolist()
     all_expression = fit["landmark_expression"].reshape(8, 100, 250)
+    all_matchable = fit["landmark_matchable"].reshape(8, 100)
     expression = {patient: all_expression[names.index(patient)] for patient in PATIENTS}
+    matchable = {patient: all_matchable[names.index(patient)] for patient in PATIENTS}
+    print(f"matchable_counts={{{', '.join(f'{p}: {int(matchable[p].sum())}/100' for p in PATIENTS)}}}")
 
     # Record the automatic gate's scores for reference, but override the gate decision.
     scores, peer_positions, auto_cheap = frozen_coverage(expression, PATIENTS)
@@ -87,7 +90,9 @@ def main():
     print(f"full_patients={full_patients}")
 
     seed = np.mean([expression[p] for p in full_patients], axis=0)
-    graphs = {p: compile_graph(match_cost(expression[p], seed), prices[p]) for p in PATIENTS}
+    graphs = {
+        p: compile_graph(match_cost(expression[p], seed), prices[p], matchable=matchable[p]) for p in PATIENTS
+    }
 
     adata = ad.read_h5ad(INPUT, backed="r")
     assert np.array_equal(fit["cell_ids"], np.asarray(adata.obs_names, str))
