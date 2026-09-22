@@ -1,0 +1,21 @@
+{
+  "0.0": {
+    "converged": false,
+    "iterations": 20,
+    "initial_smoothness_rms_second_difference": 0.013549405569280852,
+    "final_smoothness_rms_second_difference": 0.9499288440669644
+  },
+  "0.1": {
+    "converged": false,
+    "iterations": 20,
+    "initial_smoothness_rms_second_difference": 0.011218725686592995,
+    "final_smoothness_rms_second_difference": 0.3073783055152973
+  },
+  "1.0": {
+    "converged": false,
+    "iterations": 20,
+    "initial_smoothness_rms_second_difference": 0.008753372140145934,
+    "final_smoothness_rms_second_difference": 0.03464093706960514
+  },
+  "best_gamma": 1.0
+}
