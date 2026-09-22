@@ -138,8 +138,13 @@ fully-reproducible caches are intentionally gitignored (`validation/v21/experime
   `CACHE` constant in `ru1303_ru581_pairwise/run_pairwise.py`.
 - `validation/v21/experiment_round/eight_patient/joint_barycenter/*/{*.npz}` and
   `ru1303_ru581_pairwise/{three,four}_patient_joint/pilot_state.npz` — this session's own EM
-  state/candidate caches, all regeneratable deterministically (no RNG anywhere in this pipeline)
-  by rerunning the corresponding `.py` script in the same directory.
+  state/candidate caches (10 files, ~5 MB total), all regeneratable deterministically (no RNG
+  anywhere in this pipeline) by rerunning the corresponding `.py` script in the same directory.
+  Checksummed copies of all 10 also live outside `/tmp`, in case this worktree is later removed,
+  at `/data1/chanj3/wangm10/scDeBussy-v2/.htan_experiment_cache/exp-ru1303-ru581-pairwise/`
+  (verified byte-identical to the worktree via `rsync -acn` and independent `sha256sum`, both
+  clean). Checksum manifest, git-tracked: [ARTIFACT_MANIFEST.tsv](ARTIFACT_MANIFEST.tsv) (same
+  content is also written alongside the persistent copy as `MANIFEST.tsv`).
 - Raw input: `/scratch/chanj3/wangm10/HTAN/results/aligned_scdebussy_preprocessed_v2_ru942_deg_all.h5ad`
   (~1.2 GB; SHA256 in `PROVENANCE.json`).
 - Conda env: `/data1/chanj3/wangm10/conda_envs/scdebussy-py311` (has a modern `scdebussy.align`
