@@ -1,0 +1,98 @@
+{
+  "RU581": {
+    "before_matchability_fix": {
+      "internal_patient_gaps": 26,
+      "internal_reference_gaps": 0,
+      "gap_landmark_ranges": [
+        [
+          67,
+          92
+        ]
+      ],
+      "longest_map_plateau_landmarks": 1,
+      "matched_span": [
+        0,
+        99
+      ],
+      "matched_landmark_count": 74,
+      "map_posterior_mean_abs_difference": 0.013519066327091586,
+      "posterior_mean_match_mass": 0.7495283642489801,
+      "tail_skipped_fraction": 0.0,
+      "heldout_marker_mse": 1.5819058488968674
+    },
+    "after_matchability_fix": {
+      "internal_patient_gaps": 27,
+      "internal_reference_gaps": 0,
+      "gap_landmark_ranges": [
+        [
+          15,
+          15
+        ],
+        [
+          67,
+          92
+        ]
+      ],
+      "longest_map_plateau_landmarks": 1,
+      "matched_span": [
+        0,
+        99
+      ],
+      "matched_landmark_count": 73,
+      "map_posterior_mean_abs_difference": 0.01329132560120674,
+      "posterior_mean_match_mass": 0.7396646666719064,
+      "tail_skipped_fraction": 0.0,
+      "heldout_marker_mse": 1.5895216779740844
+    }
+  },
+  "RU1083": {
+    "before_matchability_fix": {
+      "internal_patient_gaps": 8,
+      "internal_reference_gaps": 0,
+      "gap_landmark_ranges": [
+        [
+          67,
+          69
+        ],
+        [
+          87,
+          91
+        ]
+      ],
+      "longest_map_plateau_landmarks": 3,
+      "matched_span": [
+        0,
+        99
+      ],
+      "matched_landmark_count": 92,
+      "map_posterior_mean_abs_difference": 0.01706184561264083,
+      "posterior_mean_match_mass": 0.9235231842865319,
+      "tail_skipped_fraction": 0.01,
+      "heldout_marker_mse": 1.3934947926342083
+    },
+    "after_matchability_fix": {
+      "internal_patient_gaps": 27,
+      "internal_reference_gaps": 0,
+      "gap_landmark_ranges": [
+        [
+          15,
+          15
+        ],
+        [
+          67,
+          92
+        ]
+      ],
+      "longest_map_plateau_landmarks": 3,
+      "matched_span": [
+        0,
+        99
+      ],
+      "matched_landmark_count": 73,
+      "map_posterior_mean_abs_difference": 0.016106205188507736,
+      "posterior_mean_match_mass": 0.7408504168293136,
+      "tail_skipped_fraction": 0.0,
+      "heldout_marker_mse": 1.4220488977312458
+    }
+  }
+}

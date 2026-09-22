@@ -48,13 +48,39 @@ def frozen_coverage(x):
     return scores, detail, cheap
 
 
-def compile_graph(cost, tail_price):
-    """Compile fixed topology and remove only the initial expression emissions."""
+MATCH_COST_SENTINEL = 1e4
+"""Permanent energy penalty added to ordinary match/warp edges sourced from an
+unmatchable patient landmark (see `compile_graph`'s `matchable` argument). Large
+relative to real trajectory-250 unit-precision costs (observed O(1-150)) so
+exp(-BETA * energy) underflows cleanly to 0, but far below float overflow --
+this is a fixed structural penalty, not a tuned model parameter."""
+
+
+def compile_graph(cost, tail_price, matchable=None):
+    """Compile fixed topology and remove only the initial expression emissions.
+
+    `matchable`, if given, is a length-100 boolean mask over the patient's own
+    landmarks (axis 0 of `cost`). Landmarks flagged False get a permanent
+    MATCH_COST_SENTINEL penalty added to every ordinary match/warp edge (kind
+    0/1/2) they could source, baked into `static` so it survives every later
+    `infer_graph` call regardless of what barycenter-dependent cost value is
+    recomputed for that landmark on a given EM iteration -- an unsupported
+    landmark's real expression is never reliable, so it should never become
+    cheap again just because the barycenter moved. Gap/patient-skip edges
+    (kind 3) have mi=-1 and are untouched by this mask, so unsupported regions
+    can still be crossed via a gap exactly as before. Passing matchable=None
+    (the default) reproduces prior behavior exactly for every existing caller.
+    """
     graph, nodes = build_soft_graph(cost, tail_eta=tail_price)
     src, dst, base, slope, kind, mi, mj = graph
     static = base.copy()
     matched = mi >= 0
     static[matched] -= cost[mi[matched], mj[matched]]
+    if matchable is not None:
+        matchable = np.asarray(matchable, bool)
+        safe_mi = np.where(matched, mi, 0)
+        unsupported = matched & ~matchable[safe_mi]
+        static[unsupported] += MATCH_COST_SENTINEL
     return (src, dst, static, slope, kind, mi, mj), nodes
 
 
