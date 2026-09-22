@@ -1,0 +1,312 @@
+{
+  "1.0": {
+    "converged": false,
+    "iterations": 20,
+    "initial_smoothness_rms_second_difference": 0.009100249795450674,
+    "final_smoothness_rms_second_difference": 0.15857114222246593,
+    "ru1303_sclc_a_in_other_sclc_n_q10_q90_initial": 0.0,
+    "ru1303_sclc_a_in_other_sclc_n_q10_q90_final": 0.0,
+    "ru831_plateau_diagnostic": {
+      "longest_plateau_landmarks": 12,
+      "n_distinct_positions": 61,
+      "matched_landmarks": 94
+    },
+    "history": [
+      {
+        "iteration": 1,
+        "negative_log_partition": 889.4157302729625,
+        "relative_improvement": 0.013705421517145615,
+        "barycenter_max_change": 0.3256172187746764,
+        "min_consensus_match_support": 4.158465775481512
+      },
+      {
+        "iteration": 2,
+        "negative_log_partition": 883.8081584509255,
+        "relative_improvement": 0.006304781477516759,
+        "barycenter_max_change": 0.25746234996866413,
+        "min_consensus_match_support": 4.40088918031822
+      },
+      {
+        "iteration": 3,
+        "negative_log_partition": 879.6121682471944,
+        "relative_improvement": 0.00474762556060299,
+        "barycenter_max_change": 0.3167076501192976,
+        "min_consensus_match_support": 4.522063854525467
+      },
+      {
+        "iteration": 4,
+        "negative_log_partition": 874.7562743209153,
+        "relative_improvement": 0.005520494260505145,
+        "barycenter_max_change": 0.47100368008009585,
+        "min_consensus_match_support": 4.593757952286466
+      },
+      {
+        "iteration": 5,
+        "negative_log_partition": 868.1924096183245,
+        "relative_improvement": 0.0075036497539687575,
+        "barycenter_max_change": 0.6222604302580441,
+        "min_consensus_match_support": 4.638848701676798
+      },
+      {
+        "iteration": 6,
+        "negative_log_partition": 861.3201429096399,
+        "relative_improvement": 0.007915603306997117,
+        "barycenter_max_change": 0.574986138767227,
+        "min_consensus_match_support": 4.6631828823688695
+      },
+      {
+        "iteration": 7,
+        "negative_log_partition": 856.0084728293278,
+        "relative_improvement": 0.006166894068410647,
+        "barycenter_max_change": 0.3741720188428863,
+        "min_consensus_match_support": 4.673705710925303
+      },
+      {
+        "iteration": 8,
+        "negative_log_partition": 852.2843468170436,
+        "relative_improvement": 0.004350571437657714,
+        "barycenter_max_change": 0.2705322890752426,
+        "min_consensus_match_support": 4.6827906328162605
+      },
+      {
+        "iteration": 9,
+        "negative_log_partition": 849.601882413667,
+        "relative_improvement": 0.00314738198981895,
+        "barycenter_max_change": 0.20205800664520046,
+        "min_consensus_match_support": 4.692863182790009
+      },
+      {
+        "iteration": 10,
+        "negative_log_partition": 847.6330595240244,
+        "relative_improvement": 0.0023173476076222108,
+        "barycenter_max_change": 0.15547962650581582,
+        "min_consensus_match_support": 4.702805875927142
+      },
+      {
+        "iteration": 11,
+        "negative_log_partition": 846.017207332647,
+        "relative_improvement": 0.0019063109599391141,
+        "barycenter_max_change": 0.17905298919229629,
+        "min_consensus_match_support": 4.713377535692728
+      },
+      {
+        "iteration": 12,
+        "negative_log_partition": 844.5301464528234,
+        "relative_improvement": 0.0017577194257219358,
+        "barycenter_max_change": 0.21414359934739258,
+        "min_consensus_match_support": 4.72543585686496
+      },
+      {
+        "iteration": 13,
+        "negative_log_partition": 843.1457498446002,
+        "relative_improvement": 0.0016392506697811245,
+        "barycenter_max_change": 0.23937677123294443,
+        "min_consensus_match_support": 4.7397279152571254
+      },
+      {
+        "iteration": 14,
+        "negative_log_partition": 841.9049912777224,
+        "relative_improvement": 0.0014715825432394427,
+        "barycenter_max_change": 0.23840278532961623,
+        "min_consensus_match_support": 4.756213083714765
+      },
+      {
+        "iteration": 15,
+        "negative_log_partition": 840.7973639003831,
+        "relative_improvement": 0.0013156203951924898,
+        "barycenter_max_change": 0.20866065349134644,
+        "min_consensus_match_support": 4.773986323871566
+      },
+      {
+        "iteration": 16,
+        "negative_log_partition": 839.7723177147025,
+        "relative_improvement": 0.0012191358223644963,
+        "barycenter_max_change": 0.16543908781816485,
+        "min_consensus_match_support": 4.792517273880903
+      },
+      {
+        "iteration": 17,
+        "negative_log_partition": 838.7952631390021,
+        "relative_improvement": 0.001163475569615357,
+        "barycenter_max_change": 0.12606493009331654,
+        "min_consensus_match_support": 4.8121033045680575
+      },
+      {
+        "iteration": 18,
+        "negative_log_partition": 837.8665455830737,
+        "relative_improvement": 0.0011072041018125199,
+        "barycenter_max_change": 0.12620939196339753,
+        "min_consensus_match_support": 4.833347274101565
+      },
+      {
+        "iteration": 19,
+        "negative_log_partition": 837.0073708819597,
+        "relative_improvement": 0.0010254314432809283,
+        "barycenter_max_change": 0.12170455706404981,
+        "min_consensus_match_support": 4.856707554094298
+      },
+      {
+        "iteration": 20,
+        "negative_log_partition": 836.2436525571457,
+        "relative_improvement": 0.0009124391867771573,
+        "barycenter_max_change": 0.11054449702413516,
+        "min_consensus_match_support": 4.882330848565665
+      }
+    ]
+  },
+  "0.0": {
+    "converged": false,
+    "iterations": 20,
+    "initial_smoothness_rms_second_difference": 0.01680726439056406,
+    "final_smoothness_rms_second_difference": 1.0074918119193967,
+    "ru1303_sclc_a_in_other_sclc_n_q10_q90_initial": 0.0,
+    "ru1303_sclc_a_in_other_sclc_n_q10_q90_final": 0.0,
+    "ru831_plateau_diagnostic": {
+      "longest_plateau_landmarks": 9,
+      "n_distinct_positions": 56,
+      "matched_landmarks": 97
+    },
+    "history": [
+      {
+        "iteration": 1,
+        "negative_log_partition": 888.6718368228369,
+        "relative_improvement": 0.014353861654939012,
+        "barycenter_max_change": 0.3883477597236662,
+        "min_consensus_match_support": 4.1800823357116945
+      },
+      {
+        "iteration": 2,
+        "negative_log_partition": 881.5365881505143,
+        "relative_improvement": 0.008029115334443861,
+        "barycenter_max_change": 0.4046473506334154,
+        "min_consensus_match_support": 4.454760900663385
+      },
+      {
+        "iteration": 3,
+        "negative_log_partition": 871.1571731035106,
+        "relative_improvement": 0.011774230572527881,
+        "barycenter_max_change": 0.8419534884717121,
+        "min_consensus_match_support": 4.6232909956871
+      },
+      {
+        "iteration": 4,
+        "negative_log_partition": 849.7328733766633,
+        "relative_improvement": 0.02459292121824914,
+        "barycenter_max_change": 1.634207098991537,
+        "min_consensus_match_support": 4.765183126455215
+      },
+      {
+        "iteration": 5,
+        "negative_log_partition": 835.6853790087927,
+        "relative_improvement": 0.016531659310824093,
+        "barycenter_max_change": 1.1369569476173846,
+        "min_consensus_match_support": 4.904164847300567
+      },
+      {
+        "iteration": 6,
+        "negative_log_partition": 826.0477164228346,
+        "relative_improvement": 0.011532644734540317,
+        "barycenter_max_change": 1.2074348857409951,
+        "min_consensus_match_support": 5.107473821031463
+      },
+      {
+        "iteration": 7,
+        "negative_log_partition": 818.4779166219926,
+        "relative_improvement": 0.009163877159085584,
+        "barycenter_max_change": 0.9857328199766429,
+        "min_consensus_match_support": 5.311140499321854
+      },
+      {
+        "iteration": 8,
+        "negative_log_partition": 811.5073693284347,
+        "relative_improvement": 0.008516475706915296,
+        "barycenter_max_change": 0.8388180308598447,
+        "min_consensus_match_support": 5.389348443636138
+      },
+      {
+        "iteration": 9,
+        "negative_log_partition": 800.5773794322831,
+        "relative_improvement": 0.013468750019111646,
+        "barycenter_max_change": 1.114186453392528,
+        "min_consensus_match_support": 5.355742110300507
+      },
+      {
+        "iteration": 10,
+        "negative_log_partition": 788.1382217422654,
+        "relative_improvement": 0.01553773315308855,
+        "barycenter_max_change": 1.4968971615432958,
+        "min_consensus_match_support": 4.220072728468799
+      },
+      {
+        "iteration": 11,
+        "negative_log_partition": 775.7108201974452,
+        "relative_improvement": 0.01576804829658951,
+        "barycenter_max_change": 1.2552755742641306,
+        "min_consensus_match_support": 3.260525248371785
+      },
+      {
+        "iteration": 12,
+        "negative_log_partition": 759.7141393477846,
+        "relative_improvement": 0.02062196431086123,
+        "barycenter_max_change": 1.3081205687914421,
+        "min_consensus_match_support": 2.5374754188599957
+      },
+      {
+        "iteration": 13,
+        "negative_log_partition": 750.5441322958566,
+        "relative_improvement": 0.012070338798486043,
+        "barycenter_max_change": 1.074072121606617,
+        "min_consensus_match_support": 2.1003470911342776
+      },
+      {
+        "iteration": 14,
+        "negative_log_partition": 746.8739331612712,
+        "relative_improvement": 0.00489005106649557,
+        "barycenter_max_change": 0.520747554636962,
+        "min_consensus_match_support": 1.9667764863255461
+      },
+      {
+        "iteration": 15,
+        "negative_log_partition": 744.7322842706511,
+        "relative_improvement": 0.002867483782109264,
+        "barycenter_max_change": 0.4087925212922112,
+        "min_consensus_match_support": 1.9272334727195617
+      },
+      {
+        "iteration": 16,
+        "negative_log_partition": 743.1712971479845,
+        "relative_improvement": 0.0020960379395869987,
+        "barycenter_max_change": 0.34781627802392645,
+        "min_consensus_match_support": 1.9134767690759864
+      },
+      {
+        "iteration": 17,
+        "negative_log_partition": 741.9608508437104,
+        "relative_improvement": 0.0016287581462300252,
+        "barycenter_max_change": 0.353695678332441,
+        "min_consensus_match_support": 1.907925599508198
+      },
+      {
+        "iteration": 18,
+        "negative_log_partition": 741.0000758042123,
+        "relative_improvement": 0.00129491338849696,
+        "barycenter_max_change": 0.3051181616317349,
+        "min_consensus_match_support": 1.9053137668581657
+      },
+      {
+        "iteration": 19,
+        "negative_log_partition": 740.1826451285755,
+        "relative_improvement": 0.001103145198399176,
+        "barycenter_max_change": 0.2197640023241494,
+        "min_consensus_match_support": 1.9038595893655206
+      },
+      {
+        "iteration": 20,
+        "negative_log_partition": 739.3762761239683,
+        "relative_improvement": 0.0010894189561376495,
+        "barycenter_max_change": 0.16315953482246037,
+        "min_consensus_match_support": 1.9028976060169238
+      }
+    ]
+  }
+}
