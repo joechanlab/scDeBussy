@@ -1,0 +1,18 @@
+{
+  "s_local": {
+    "mean_gene_concordance": 0.4210611179709765,
+    "mean_peak_spread": 0.5351089588377724
+  },
+  "trajectory_250": {
+    "mean_gene_concordance": 0.41870597471171006,
+    "mean_peak_spread": 0.5133171912832931
+  },
+  "eight_patient_joint_gamma1_prefix": {
+    "mean_gene_concordance": 0.5818499572416068,
+    "mean_peak_spread": 0.35835351089588385
+  },
+  "eight_patient_joint_gamma1": {
+    "mean_gene_concordance": 0.5524796258988276,
+    "mean_peak_spread": 0.39467312348668276
+  }
+}

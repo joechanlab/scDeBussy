@@ -1,0 +1,68 @@
+{
+  "Unaligned input ($s_{local}$)": {
+    "input": "/scratch/chanj3/wangm10/HTAN/results/aligned_scdebussy_preprocessed_v2_ru942_deg_all.h5ad"
+  },
+  "trajectory_250": {
+    "name": "trajectory_250",
+    "description": "Top 250 label-free recurrent trajectory genes, restricted warp",
+    "transform": {
+      "genes_file": "validation/v21/experiment_round/eight_patient/feature_selection/top_250.json",
+      "patient_gene_center": false
+    },
+    "fit": {
+      "patient_key": "patient",
+      "pseudotime_key": "s_local",
+      "n_landmarks": 100,
+      "consensus_resolution": 100,
+      "landmark_method": "fixed",
+      "locality_radius": 0.1,
+      "beta": 1.0,
+      "mode": "open",
+      "n_min": 5,
+      "epsilon": 1e-06,
+      "kappa_i": 3.0,
+      "kappa_d": 3.0,
+      "calibration_quantile": 0.9,
+      "calibration_band": 0.25,
+      "max_iter": 200,
+      "tol": 1e-06,
+      "patience": 3,
+      "d_min": 0.001,
+      "chunk_size": 1024,
+      "backend": "numba"
+    }
+  },
+  "eight_patient_joint_gamma1_prefix": {
+    "name": "eight_patient_joint_gamma1_prefix",
+    "gamma": 1.0,
+    "patients": [
+      "RU1083",
+      "RU1303",
+      "RU1444",
+      "RU151",
+      "RU263",
+      "RU581",
+      "RU831",
+      "RU942"
+    ]
+  },
+  "eight_patient_joint_gamma1": {
+    "name": "eight_patient_joint_gamma1",
+    "gamma": 1.0,
+    "patients": [
+      "RU1083",
+      "RU1303",
+      "RU1444",
+      "RU151",
+      "RU263",
+      "RU581",
+      "RU831",
+      "RU942"
+    ],
+    "full_patients": [
+      "RU1083",
+      "RU1444",
+      "RU581"
+    ]
+  }
+}

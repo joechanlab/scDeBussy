@@ -2,310 +2,310 @@
   "1.0": {
     "converged": false,
     "iterations": 20,
-    "initial_smoothness_rms_second_difference": 0.009100249795450674,
-    "final_smoothness_rms_second_difference": 0.15857114222246593,
+    "initial_smoothness_rms_second_difference": 0.00821889923827924,
+    "final_smoothness_rms_second_difference": 0.09614501447765428,
     "ru1303_sclc_a_in_other_sclc_n_q10_q90_initial": 0.0,
-    "ru1303_sclc_a_in_other_sclc_n_q10_q90_final": 0.0,
+    "ru1303_sclc_a_in_other_sclc_n_q10_q90_final": 0.029017857142857144,
     "ru831_plateau_diagnostic": {
-      "longest_plateau_landmarks": 12,
-      "n_distinct_positions": 61,
-      "matched_landmarks": 94
+      "longest_plateau_landmarks": 6,
+      "n_distinct_positions": 68,
+      "matched_landmarks": 76
     },
     "history": [
       {
         "iteration": 1,
-        "negative_log_partition": 889.4157302729625,
-        "relative_improvement": 0.013705421517145615,
-        "barycenter_max_change": 0.3256172187746764,
-        "min_consensus_match_support": 4.158465775481512
+        "negative_log_partition": 940.5510855668666,
+        "relative_improvement": 0.007209676587465948,
+        "barycenter_max_change": 0.27653360699129115,
+        "min_consensus_match_support": 3.9227791959590017
       },
       {
         "iteration": 2,
-        "negative_log_partition": 883.8081584509255,
-        "relative_improvement": 0.006304781477516759,
-        "barycenter_max_change": 0.25746234996866413,
-        "min_consensus_match_support": 4.40088918031822
+        "negative_log_partition": 938.2590157107736,
+        "relative_improvement": 0.002436943501810522,
+        "barycenter_max_change": 0.2101927007540101,
+        "min_consensus_match_support": 4.095363519580679
       },
       {
         "iteration": 3,
-        "negative_log_partition": 879.6121682471944,
-        "relative_improvement": 0.00474762556060299,
-        "barycenter_max_change": 0.3167076501192976,
-        "min_consensus_match_support": 4.522063854525467
+        "negative_log_partition": 937.1271562733223,
+        "relative_improvement": 0.0012063400601526912,
+        "barycenter_max_change": 0.14711818131885446,
+        "min_consensus_match_support": 4.1574814918626855
       },
       {
         "iteration": 4,
-        "negative_log_partition": 874.7562743209153,
-        "relative_improvement": 0.005520494260505145,
-        "barycenter_max_change": 0.47100368008009585,
-        "min_consensus_match_support": 4.593757952286466
+        "negative_log_partition": 936.4307773166839,
+        "relative_improvement": 0.0007430997511667834,
+        "barycenter_max_change": 0.10960457072781704,
+        "min_consensus_match_support": 4.1817423376234695
       },
       {
         "iteration": 5,
-        "negative_log_partition": 868.1924096183245,
-        "relative_improvement": 0.0075036497539687575,
-        "barycenter_max_change": 0.6222604302580441,
-        "min_consensus_match_support": 4.638848701676798
+        "negative_log_partition": 935.9275849453621,
+        "relative_improvement": 0.0005373513809143327,
+        "barycenter_max_change": 0.11151378004362522,
+        "min_consensus_match_support": 4.190392015472104
       },
       {
         "iteration": 6,
-        "negative_log_partition": 861.3201429096399,
-        "relative_improvement": 0.007915603306997117,
-        "barycenter_max_change": 0.574986138767227,
-        "min_consensus_match_support": 4.6631828823688695
+        "negative_log_partition": 935.5060328896175,
+        "relative_improvement": 0.0004504109746581139,
+        "barycenter_max_change": 0.1206504974605016,
+        "min_consensus_match_support": 4.19219652091207
       },
       {
         "iteration": 7,
-        "negative_log_partition": 856.0084728293278,
-        "relative_improvement": 0.006166894068410647,
-        "barycenter_max_change": 0.3741720188428863,
-        "min_consensus_match_support": 4.673705710925303
+        "negative_log_partition": 935.1110994175308,
+        "relative_improvement": 0.0004221602621490271,
+        "barycenter_max_change": 0.13396711100208814,
+        "min_consensus_match_support": 4.1908566109393135
       },
       {
         "iteration": 8,
-        "negative_log_partition": 852.2843468170436,
-        "relative_improvement": 0.004350571437657714,
-        "barycenter_max_change": 0.2705322890752426,
-        "min_consensus_match_support": 4.6827906328162605
+        "negative_log_partition": 934.7188359340026,
+        "relative_improvement": 0.0004194832932391566,
+        "barycenter_max_change": 0.14761641901719535,
+        "min_consensus_match_support": 4.187973053584171
       },
       {
         "iteration": 9,
-        "negative_log_partition": 849.601882413667,
-        "relative_improvement": 0.00314738198981895,
-        "barycenter_max_change": 0.20205800664520046,
-        "min_consensus_match_support": 4.692863182790009
+        "negative_log_partition": 934.3242216084709,
+        "relative_improvement": 0.0004221743591348749,
+        "barycenter_max_change": 0.1561019228557523,
+        "min_consensus_match_support": 4.184192785338985
       },
       {
         "iteration": 10,
-        "negative_log_partition": 847.6330595240244,
-        "relative_improvement": 0.0023173476076222108,
-        "barycenter_max_change": 0.15547962650581582,
-        "min_consensus_match_support": 4.702805875927142
+        "negative_log_partition": 933.9376013160005,
+        "relative_improvement": 0.0004137967137412227,
+        "barycenter_max_change": 0.15386291712778633,
+        "min_consensus_match_support": 4.179801430034889
       },
       {
         "iteration": 11,
-        "negative_log_partition": 846.017207332647,
-        "relative_improvement": 0.0019063109599391141,
-        "barycenter_max_change": 0.17905298919229629,
-        "min_consensus_match_support": 4.713377535692728
+        "negative_log_partition": 933.5714615742215,
+        "relative_improvement": 0.0003920387628285258,
+        "barycenter_max_change": 0.13886151653698597,
+        "min_consensus_match_support": 4.175083867539149
       },
       {
         "iteration": 12,
-        "negative_log_partition": 844.5301464528234,
-        "relative_improvement": 0.0017577194257219358,
-        "barycenter_max_change": 0.21414359934739258,
-        "min_consensus_match_support": 4.72543585686496
+        "negative_log_partition": 933.216609235675,
+        "relative_improvement": 0.00038010195593182397,
+        "barycenter_max_change": 0.11445013847177421,
+        "min_consensus_match_support": 4.170434028123621
       },
       {
         "iteration": 13,
-        "negative_log_partition": 843.1457498446002,
-        "relative_improvement": 0.0016392506697811245,
-        "barycenter_max_change": 0.23937677123294443,
-        "min_consensus_match_support": 4.7397279152571254
+        "negative_log_partition": 932.8293171856583,
+        "relative_improvement": 0.0004150076693705168,
+        "barycenter_max_change": 0.09609610260503687,
+        "min_consensus_match_support": 4.166303285993479
       },
       {
         "iteration": 14,
-        "negative_log_partition": 841.9049912777224,
-        "relative_improvement": 0.0014715825432394427,
-        "barycenter_max_change": 0.23840278532961623,
-        "min_consensus_match_support": 4.756213083714765
+        "negative_log_partition": 932.3408001435417,
+        "relative_improvement": 0.0005236939203308864,
+        "barycenter_max_change": 0.12634778123879786,
+        "min_consensus_match_support": 4.163093569666341
       },
       {
         "iteration": 15,
-        "negative_log_partition": 840.7973639003831,
-        "relative_improvement": 0.0013156203951924898,
-        "barycenter_max_change": 0.20866065349134644,
-        "min_consensus_match_support": 4.773986323871566
+        "negative_log_partition": 931.678412696424,
+        "relative_improvement": 0.0007104563556757508,
+        "barycenter_max_change": 0.16257233223087386,
+        "min_consensus_match_support": 4.160999202834485
       },
       {
         "iteration": 16,
-        "negative_log_partition": 839.7723177147025,
-        "relative_improvement": 0.0012191358223644963,
-        "barycenter_max_change": 0.16543908781816485,
-        "min_consensus_match_support": 4.792517273880903
+        "negative_log_partition": 930.7961115723717,
+        "relative_improvement": 0.0009470017894894665,
+        "barycenter_max_change": 0.1956468946407821,
+        "min_consensus_match_support": 4.159800869184513
       },
       {
         "iteration": 17,
-        "negative_log_partition": 838.7952631390021,
-        "relative_improvement": 0.001163475569615357,
-        "barycenter_max_change": 0.12606493009331654,
-        "min_consensus_match_support": 4.8121033045680575
+        "negative_log_partition": 929.7368448554578,
+        "relative_improvement": 0.0011380222840902923,
+        "barycenter_max_change": 0.213249502614965,
+        "min_consensus_match_support": 4.158915565031409
       },
       {
         "iteration": 18,
-        "negative_log_partition": 837.8665455830737,
-        "relative_improvement": 0.0011072041018125199,
-        "barycenter_max_change": 0.12620939196339753,
-        "min_consensus_match_support": 4.833347274101565
+        "negative_log_partition": 928.6614116379128,
+        "relative_improvement": 0.0011567071085713098,
+        "barycenter_max_change": 0.20515555527109308,
+        "min_consensus_match_support": 4.157844001463696
       },
       {
         "iteration": 19,
-        "negative_log_partition": 837.0073708819597,
-        "relative_improvement": 0.0010254314432809283,
-        "barycenter_max_change": 0.12170455706404981,
-        "min_consensus_match_support": 4.856707554094298
+        "negative_log_partition": 927.7565034383947,
+        "relative_improvement": 0.000974422096339812,
+        "barycenter_max_change": 0.1703788918907856,
+        "min_consensus_match_support": 4.156360043305041
       },
       {
         "iteration": 20,
-        "negative_log_partition": 836.2436525571457,
-        "relative_improvement": 0.0009124391867771573,
-        "barycenter_max_change": 0.11054449702413516,
-        "min_consensus_match_support": 4.882330848565665
+        "negative_log_partition": 927.1086291804393,
+        "relative_improvement": 0.0006983235962823481,
+        "barycenter_max_change": 0.12260238005584112,
+        "min_consensus_match_support": 4.154450928667545
       }
     ]
   },
   "0.0": {
     "converged": false,
     "iterations": 20,
-    "initial_smoothness_rms_second_difference": 0.01680726439056406,
-    "final_smoothness_rms_second_difference": 1.0074918119193967,
+    "initial_smoothness_rms_second_difference": 0.015758614985261158,
+    "final_smoothness_rms_second_difference": 0.804592049916762,
     "ru1303_sclc_a_in_other_sclc_n_q10_q90_initial": 0.0,
-    "ru1303_sclc_a_in_other_sclc_n_q10_q90_final": 0.0,
+    "ru1303_sclc_a_in_other_sclc_n_q10_q90_final": 0.020089285714285716,
     "ru831_plateau_diagnostic": {
-      "longest_plateau_landmarks": 9,
-      "n_distinct_positions": 56,
-      "matched_landmarks": 97
+      "longest_plateau_landmarks": 8,
+      "n_distinct_positions": 62,
+      "matched_landmarks": 79
     },
     "history": [
       {
         "iteration": 1,
-        "negative_log_partition": 888.6718368228369,
-        "relative_improvement": 0.014353861654939012,
-        "barycenter_max_change": 0.3883477597236662,
-        "min_consensus_match_support": 4.1800823357116945
+        "negative_log_partition": 939.8727986353578,
+        "relative_improvement": 0.00776460759286843,
+        "barycenter_max_change": 0.4013011937886479,
+        "min_consensus_match_support": 3.941206178177585
       },
       {
         "iteration": 2,
-        "negative_log_partition": 881.5365881505143,
-        "relative_improvement": 0.008029115334443861,
-        "barycenter_max_change": 0.4046473506334154,
-        "min_consensus_match_support": 4.454760900663385
+        "negative_log_partition": 936.6531557261117,
+        "relative_improvement": 0.003425615587471869,
+        "barycenter_max_change": 0.41711784591540235,
+        "min_consensus_match_support": 4.140051991110475
       },
       {
         "iteration": 3,
-        "negative_log_partition": 871.1571731035106,
-        "relative_improvement": 0.011774230572527881,
-        "barycenter_max_change": 0.8419534884717121,
-        "min_consensus_match_support": 4.6232909956871
+        "negative_log_partition": 934.5012246330667,
+        "relative_improvement": 0.0022974684704678305,
+        "barycenter_max_change": 0.3541433172748767,
+        "min_consensus_match_support": 4.224317344339944
       },
       {
         "iteration": 4,
-        "negative_log_partition": 849.7328733766633,
-        "relative_improvement": 0.02459292121824914,
-        "barycenter_max_change": 1.634207098991537,
-        "min_consensus_match_support": 4.765183126455215
+        "negative_log_partition": 932.7636553875544,
+        "relative_improvement": 0.0018593547014286295,
+        "barycenter_max_change": 0.23465546821138483,
+        "min_consensus_match_support": 4.267219884674445
       },
       {
         "iteration": 5,
-        "negative_log_partition": 835.6853790087927,
-        "relative_improvement": 0.016531659310824093,
-        "barycenter_max_change": 1.1369569476173846,
-        "min_consensus_match_support": 4.904164847300567
+        "negative_log_partition": 931.0695992275892,
+        "relative_improvement": 0.0018161687048809882,
+        "barycenter_max_change": 0.3128613076127462,
+        "min_consensus_match_support": 4.299549633903581
       },
       {
         "iteration": 6,
-        "negative_log_partition": 826.0477164228346,
-        "relative_improvement": 0.011532644734540317,
-        "barycenter_max_change": 1.2074348857409951,
-        "min_consensus_match_support": 5.107473821031463
+        "negative_log_partition": 929.3821513044807,
+        "relative_improvement": 0.0018123757069379044,
+        "barycenter_max_change": 0.3101702692701367,
+        "min_consensus_match_support": 4.338897284077448
       },
       {
         "iteration": 7,
-        "negative_log_partition": 818.4779166219926,
-        "relative_improvement": 0.009163877159085584,
-        "barycenter_max_change": 0.9857328199766429,
-        "min_consensus_match_support": 5.311140499321854
+        "negative_log_partition": 926.9553050807017,
+        "relative_improvement": 0.0026112468594029327,
+        "barycenter_max_change": 0.33141242928040615,
+        "min_consensus_match_support": 4.397365051662201
       },
       {
         "iteration": 8,
-        "negative_log_partition": 811.5073693284347,
-        "relative_improvement": 0.008516475706915296,
-        "barycenter_max_change": 0.8388180308598447,
-        "min_consensus_match_support": 5.389348443636138
+        "negative_log_partition": 920.9559518562949,
+        "relative_improvement": 0.006472106250996128,
+        "barycenter_max_change": 0.70540277892297,
+        "min_consensus_match_support": 4.486090632287551
       },
       {
         "iteration": 9,
-        "negative_log_partition": 800.5773794322831,
-        "relative_improvement": 0.013468750019111646,
-        "barycenter_max_change": 1.114186453392528,
-        "min_consensus_match_support": 5.355742110300507
+        "negative_log_partition": 910.252218623179,
+        "relative_improvement": 0.011622416046653693,
+        "barycenter_max_change": 1.1811478477657333,
+        "min_consensus_match_support": 4.614745966505769
       },
       {
         "iteration": 10,
-        "negative_log_partition": 788.1382217422654,
-        "relative_improvement": 0.01553773315308855,
-        "barycenter_max_change": 1.4968971615432958,
-        "min_consensus_match_support": 4.220072728468799
+        "negative_log_partition": 900.6550041167895,
+        "relative_improvement": 0.010543467305035475,
+        "barycenter_max_change": 1.134722496076003,
+        "min_consensus_match_support": 4.78339390503284
       },
       {
         "iteration": 11,
-        "negative_log_partition": 775.7108201974452,
-        "relative_improvement": 0.01576804829658951,
-        "barycenter_max_change": 1.2552755742641306,
-        "min_consensus_match_support": 3.260525248371785
+        "negative_log_partition": 891.8131270136645,
+        "relative_improvement": 0.009817163134285451,
+        "barycenter_max_change": 1.0404445327094747,
+        "min_consensus_match_support": 4.920706668029359
       },
       {
         "iteration": 12,
-        "negative_log_partition": 759.7141393477846,
-        "relative_improvement": 0.02062196431086123,
-        "barycenter_max_change": 1.3081205687914421,
-        "min_consensus_match_support": 2.5374754188599957
+        "negative_log_partition": 884.3232841936187,
+        "relative_improvement": 0.008398444240360433,
+        "barycenter_max_change": 1.1997293206940314,
+        "min_consensus_match_support": 4.916255169337921
       },
       {
         "iteration": 13,
-        "negative_log_partition": 750.5441322958566,
-        "relative_improvement": 0.012070338798486043,
-        "barycenter_max_change": 1.074072121606617,
-        "min_consensus_match_support": 2.1003470911342776
+        "negative_log_partition": 880.4817245740101,
+        "relative_improvement": 0.0043440670264739915,
+        "barycenter_max_change": 0.5995146060656573,
+        "min_consensus_match_support": 4.896360944099415
       },
       {
         "iteration": 14,
-        "negative_log_partition": 746.8739331612712,
-        "relative_improvement": 0.00489005106649557,
-        "barycenter_max_change": 0.520747554636962,
-        "min_consensus_match_support": 1.9667764863255461
+        "negative_log_partition": 878.3870637127893,
+        "relative_improvement": 0.00237899413782174,
+        "barycenter_max_change": 0.4757587224759421,
+        "min_consensus_match_support": 4.8665406713648105
       },
       {
         "iteration": 15,
-        "negative_log_partition": 744.7322842706511,
-        "relative_improvement": 0.002867483782109264,
-        "barycenter_max_change": 0.4087925212922112,
-        "min_consensus_match_support": 1.9272334727195617
+        "negative_log_partition": 877.0755869715365,
+        "relative_improvement": 0.0014930510653349493,
+        "barycenter_max_change": 0.39542927310084774,
+        "min_consensus_match_support": 4.841057313865818
       },
       {
         "iteration": 16,
-        "negative_log_partition": 743.1712971479845,
-        "relative_improvement": 0.0020960379395869987,
-        "barycenter_max_change": 0.34781627802392645,
-        "min_consensus_match_support": 1.9134767690759864
+        "negative_log_partition": 876.083323633447,
+        "relative_improvement": 0.0011313316124961492,
+        "barycenter_max_change": 0.27243473610150204,
+        "min_consensus_match_support": 4.827168237872949
       },
       {
         "iteration": 17,
-        "negative_log_partition": 741.9608508437104,
-        "relative_improvement": 0.0016287581462300252,
-        "barycenter_max_change": 0.353695678332441,
-        "min_consensus_match_support": 1.907925599508198
+        "negative_log_partition": 875.0576406012793,
+        "relative_improvement": 0.0011707596806132042,
+        "barycenter_max_change": 0.28470008042309125,
+        "min_consensus_match_support": 4.82803220276857
       },
       {
         "iteration": 18,
-        "negative_log_partition": 741.0000758042123,
-        "relative_improvement": 0.00129491338849696,
-        "barycenter_max_change": 0.3051181616317349,
-        "min_consensus_match_support": 1.9053137668581657
+        "negative_log_partition": 873.7525119055051,
+        "relative_improvement": 0.0014914774012800122,
+        "barycenter_max_change": 0.29288116450074453,
+        "min_consensus_match_support": 4.844715062037875
       },
       {
         "iteration": 19,
-        "negative_log_partition": 740.1826451285755,
-        "relative_improvement": 0.001103145198399176,
-        "barycenter_max_change": 0.2197640023241494,
-        "min_consensus_match_support": 1.9038595893655206
+        "negative_log_partition": 871.9150271365643,
+        "relative_improvement": 0.002102980814250936,
+        "barycenter_max_change": 0.4235041693699264,
+        "min_consensus_match_support": 4.877053857877932
       },
       {
         "iteration": 20,
-        "negative_log_partition": 739.3762761239683,
-        "relative_improvement": 0.0010894189561376495,
-        "barycenter_max_change": 0.16315953482246037,
-        "min_consensus_match_support": 1.9028976060169238
+        "negative_log_partition": 869.4993645277375,
+        "relative_improvement": 0.002770525261802173,
+        "barycenter_max_change": 0.5508042988606809,
+        "min_consensus_match_support": 4.531835907127306
       }
     ]
   }
