@@ -35,8 +35,8 @@ GAP_SCALE = 3.0
 BETA = 5.0
 
 
-def build_soft_graph(cost):
-    """Compile one graph with edge coefficients for quadratic speed-run cost."""
+def build_soft_graph(cost, tail_eta=ETA):
+    """Compile the run-regularized graph with a separate RU581 terminal-tail price."""
     patient_gap_mode = 2 * MAX_RUN + 1
     reference_gap_mode = 2 * MAX_RUN + 2
     states = [None]
@@ -81,7 +81,7 @@ def build_soft_graph(cost):
             gap = GAP_SCALE * (ETA + (mode != reference_gap_mode) * LAMBDA)
             edge(node, indices[i, j + 1, reference_gap_mode], gap, 0, 4)
         if i == 100 and mode <= 2 * MAX_RUN:
-            edge(node, sink, (100 - j) * ETA, 0, 6)
+            edge(node, sink, (100 - j) * tail_eta, 0, 6)
 
     data = np.asarray(rows)
     arrays = tuple(np.ascontiguousarray(data[:, k], dtype=float if k in (2, 3) else np.int64) for k in range(7))
