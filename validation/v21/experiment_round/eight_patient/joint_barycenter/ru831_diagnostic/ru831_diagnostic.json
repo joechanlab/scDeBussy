@@ -1,0 +1,74 @@
+{
+  "RU581": {
+    "reference": "RU581",
+    "terminal_price": 0.516917977676361,
+    "internal_patient_gaps": 26,
+    "internal_reference_gaps": 0,
+    "gap_landmark_ranges": [
+      [
+        67,
+        92
+      ]
+    ],
+    "longest_map_plateau_landmarks": 1,
+    "plateau_range": [
+      0,
+      0
+    ],
+    "plateau_value": 0.0,
+    "diagnostic_window_kind": "internal_gap",
+    "map_posterior_mean_abs_difference": 0.013519066327091586,
+    "posterior_mean_match_mass": 0.7495283642489801,
+    "tail_skipped_fraction": 0.0,
+    "heldout_marker_mse": 1.5819058488968674,
+    "window_landmarks": [
+      65,
+      94
+    ],
+    "frozen_map_window_mean_matched_cost": 1.1872240796807914,
+    "unconstrained_dtw_window_mean_cost": 31.49487738392249,
+    "window_matched_landmark_count": 4,
+    "window_total_landmark_count": 30,
+    "window_best_achievable_cost_mean": 31.363441540709303,
+    "overall_best_achievable_cost_mean": 9.795422728642645,
+    "window_cost_ratio_vs_overall": 3.2018466593585537
+  },
+  "RU1083": {
+    "reference": "RU1083",
+    "terminal_price": 0.516917977676361,
+    "internal_patient_gaps": 8,
+    "internal_reference_gaps": 0,
+    "gap_landmark_ranges": [
+      [
+        67,
+        69
+      ],
+      [
+        87,
+        91
+      ]
+    ],
+    "longest_map_plateau_landmarks": 3,
+    "plateau_range": [
+      36,
+      38
+    ],
+    "plateau_value": 0.42424242424242425,
+    "diagnostic_window_kind": "internal_gap",
+    "map_posterior_mean_abs_difference": 0.01706184561264083,
+    "posterior_mean_match_mass": 0.9235231842865319,
+    "tail_skipped_fraction": 0.01,
+    "heldout_marker_mse": 1.3934947926342083,
+    "window_landmarks": [
+      85,
+      93
+    ],
+    "frozen_map_window_mean_matched_cost": 1.5225583059875105,
+    "unconstrained_dtw_window_mean_cost": 101.00073769248347,
+    "window_matched_landmark_count": 4,
+    "window_total_landmark_count": 9,
+    "window_best_achievable_cost_mean": 100.02802515274607,
+    "overall_best_achievable_cost_mean": 9.624210154063688,
+    "window_cost_ratio_vs_overall": 10.393374994051916
+  }
+}
