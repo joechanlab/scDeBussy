@@ -108,8 +108,8 @@ class Graph:
 class LocalWarpLattice:
     """One patient's fixed-cost lattice; 1x1 is permitted for analytic fixtures.
 
-    ``warp="on"`` opts into the joint posterior-warp graph mode (see
-    ``validation/v21/experiment_round/JOINT_WARP_CONTRACT.md``): match edges may
+    ``warp="on"`` opts into the local-warp posterior-warp graph mode (see
+    ``validation/v21/experiment_round/``): match edges may
     also consume ``(1,2)`` or ``(2,1)`` landmarks at cost ``omega_warp`` above the
     averaged/summed ``delta``, and open-mode terminal edges pay an independent
     ``lambda_terminal_gap`` open charge (old mode terminal edges pay none). This
