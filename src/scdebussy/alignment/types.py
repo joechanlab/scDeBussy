@@ -29,6 +29,7 @@ class Landmarks:
     n_eff: np.ndarray
     local_count: np.ndarray
     matchable: np.ndarray
+    support_intervals: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -81,13 +82,29 @@ class AlignmentResult:
     cell_pseudotime: np.ndarray
     provenance: dict
     diagnostics: dict = field(default_factory=dict)
+    consensus_coordinates: np.ndarray | None = None
 
-    def write(self, adata, *, namespace="scdebussy_v2"):
+    def __post_init__(self):
+        if self.consensus_coordinates is None:
+            # Explicit compatibility for results constructed under the v2.0 contract.
+            self.consensus_coordinates = np.arange(len(self.barycenter)) / len(self.barycenter)
+            self.provenance.setdefault("coordinate_convention", "half-open-rank-v2.0")
+        self.consensus_coordinates = np.asarray(self.consensus_coordinates, dtype=float).copy()
+        axis = self.consensus_coordinates
+        if (
+            axis.shape != (len(self.barycenter),)
+            or not np.isfinite(axis).all()
+            or np.any(np.diff(axis) <= 0)
+            or np.any((axis < 0) | (axis > 1))
+        ):
+            raise ValueError("consensus_coordinates must be strictly increasing in [0,1] and match barycenter rows")
+
+    def write(self, adata, *, namespace="scdebussy_alignment"):
         """Explicitly write v2 outputs without replacing any v1 fields."""
-        from ._project import project
+        from .projection import project
 
-        if not namespace.startswith("scdebussy_v2"):
-            raise ValueError("namespace must start with 'scdebussy_v2'")
+        if not namespace.startswith("scdebussy_alignment"):
+            raise ValueError("namespace must start with 'scdebussy_alignment'")
         projection = project(self, adata)
         for name in ("position", "unprojected", "entropy", "status", "log_retained"):
             adata.obs[f"{namespace}_{name}"] = getattr(projection, name)
@@ -97,6 +114,7 @@ class AlignmentResult:
             "patients": np.asarray(self.patients),
             "genes": np.asarray(self.genes),
             "barycenter": self.barycenter.copy(),
+            "consensus_coordinates": self.consensus_coordinates.copy(),
             "s0": self.s0.copy(),
             "s1": self.s1.copy(),
             "log_s0": self.log_s0.copy(),
@@ -109,6 +127,7 @@ class AlignmentResult:
             "landmarks": {
                 str(k): {
                     "patient": lm.patient,
+                    "support_intervals": lm.support_intervals if lm.support_intervals is not None else np.empty((0, 2)),
                     **{
                         name: getattr(lm, name).copy()
                         for name in (
