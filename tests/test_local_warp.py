@@ -92,3 +92,12 @@ def test_fit_baseline_and_local_warp():
     s = summarize(warp, q)
     assert np.isfinite(q.position).any()
     assert np.isfinite(s.coverage).all()
+
+
+def test_directional_stretch_and_compression():
+    stretch = infer_local_warp(local([[0, 0]], warp_penalty=0.001), backend="numpy")
+    assert stretch.expected_match_12 > 0.8
+    assert stretch.expected_match_21 == pytest.approx(0)
+    compression = infer_local_warp(local([[0], [0]], warp_penalty=0.001), backend="numpy")
+    assert compression.expected_match_21 > 0.8
+    assert compression.expected_match_12 == pytest.approx(0)
