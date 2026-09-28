@@ -69,6 +69,8 @@ def fit(
     """
     if landmark_method not in {"fixed", "expression"}:
         raise ValueError("landmark_method must be fixed or expression")
+    if alignment_model == "local_warp" and mode != "open":
+        raise ValueError("local_warp requires mode=open")
     if alignment_model not in {"affine_gap", "local_warp"}:
         raise ValueError("alignment_model must be affine_gap or local_warp")
     if not np.isfinite(warp_penalty) or warp_penalty < 0:
