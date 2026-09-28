@@ -13,6 +13,8 @@ import numpy as np
 from .consensus import costs, expected_match_energy, initialize, sufficient_statistics
 from .landmarks import estimate
 from .lattice import LatticeModel
+from .local_warp import LocalWarpLattice, TerminalCosts
+from .local_warp_posterior import infer_local_warp
 from .posterior import infer
 from .types import AlignmentResult, DegenerateCalibrationError
 
@@ -54,6 +56,10 @@ def fit(
     discovery_resolution=None,
     precision_mode="estimated",
     contribution_cap_quantile=0.95,
+    alignment_model="affine_gap",
+    warp_penalty=0.0,
+    terminal_costs=None,
+    terminal_costs_by_patient=None,
 ) -> AlignmentResult:
     """Fit a fixed-temperature Gibbs alignment, without mutating ``adata``.
 
@@ -63,6 +69,14 @@ def fit(
     """
     if landmark_method not in {"fixed", "expression"}:
         raise ValueError("landmark_method must be fixed or expression")
+    if alignment_model not in {"affine_gap", "local_warp"}:
+        raise ValueError("alignment_model must be affine_gap or local_warp")
+    if not np.isfinite(warp_penalty) or warp_penalty < 0:
+        raise ValueError("warp_penalty must be finite and nonnegative")
+    if terminal_costs is not None and not isinstance(terminal_costs, TerminalCosts):
+        raise TypeError("terminal_costs must be TerminalCosts")
+    if terminal_costs_by_patient is not None and terminal_costs is not None:
+        raise ValueError("provide terminal_costs or terminal_costs_by_patient, not both")
     if precision_mode not in {"estimated", "unit", "capped"}:
         raise ValueError("precision_mode must be estimated, unit, or capped")
     if not 0 < contribution_cap_quantile <= 1:
@@ -139,6 +153,19 @@ def fit(
     for value in (eta_i, eta_d):
         if not np.isfinite(value) or value <= 0:
             raise ValueError("fit requires positive finite extension costs")
+    if alignment_model == "local_warp":
+        if terminal_costs_by_patient is not None:
+            if set(terminal_costs_by_patient) != {lm.patient for lm in landmarks}:
+                raise ValueError("terminal_costs_by_patient must contain exactly one entry per patient")
+            costs_by_patient = dict(terminal_costs_by_patient)
+            if not all(isinstance(value, TerminalCosts) for value in costs_by_patient.values()):
+                raise TypeError("terminal_costs_by_patient values must be TerminalCosts")
+        else:
+            common_terminal_costs = TerminalCosts.symmetric(eta_i) if terminal_costs is None else terminal_costs
+            costs_by_patient = {lm.patient: common_terminal_costs for lm in landmarks}
+    else:
+        costs_by_patient = {}
+
     config = {
         "patient_key": patient_key,
         "pseudotime_key": pseudotime_key,
@@ -169,9 +196,34 @@ def fit(
         "backend": backend,
         "precision_mode": precision_mode,
         "contribution_cap_quantile": contribution_cap_quantile,
+        "alignment_model": alignment_model,
+        "warp_penalty": warp_penalty,
+        "terminal_costs": (
+            {p: vars(c) for p, c in costs_by_patient.items()} if alignment_model == "local_warp" else None
+        ),
     }
 
     def e_step(b, counts=False):
+        if alignment_model == "local_warp":
+            return tuple(
+                infer_local_warp(
+                    LocalWarpLattice(
+                        costs(lm, b),
+                        beta,
+                        eta_i,
+                        eta_d,
+                        kappa_i * eta_i,
+                        kappa_d * eta_d,
+                        lm.matchable,
+                        "open",
+                        warp="on",
+                        omega_warp=warp_penalty,
+                        terminal_costs=costs_by_patient[lm.patient],
+                    ),
+                    backend=backend,
+                )
+                for lm in landmarks
+            )
         return tuple(
             infer(
                 LatticeModel(costs(lm, b), beta, eta_i, eta_d, kappa_i * eta_i, kappa_d * eta_d, lm.matchable, mode),
@@ -231,20 +283,29 @@ def fit(
             provenance[package] = "source"
     diagnostic = {}
     for lm, p in zip(landmarks, posterior, strict=True):
-        low = p.low_match_probability()
-        diagnostic[lm.patient] = {
-            "no_match_probability": p.no_match_probability,
-            "low_match_probability": low,
-            "unaligned": not np.isfinite(p.log_a).any(),
-            "path_entropy": p.entropy,
-            "numerical_zero_matches": int(np.sum(np.isfinite(p.log_a) & (p.a == 0))),
-        }
-        if low > 0.5:
-            warnings.warn(
-                f"{lm.patient}: posterior probability of <10% matched consensus exceeds 0.5",
-                RuntimeWarning,
-                stacklevel=2,
-            )
+        if alignment_model == "local_warp":
+            diagnostic[lm.patient] = {
+                "unaligned": not np.isfinite(p.log_a).any(),
+                "path_entropy": p.entropy,
+                "patient_terminal_unmatched": float(p.patient_unmatched_terminal.sum()),
+                "consensus_terminal_unmatched": float(p.consensus_unmatched_terminal.sum()),
+                "warp_edges": float(p.expected_match_12 + p.expected_match_21),
+            }
+        else:
+            low = p.low_match_probability()
+            diagnostic[lm.patient] = {
+                "no_match_probability": p.no_match_probability,
+                "low_match_probability": low,
+                "unaligned": not np.isfinite(p.log_a).any(),
+                "path_entropy": p.entropy,
+                "numerical_zero_matches": int(np.sum(np.isfinite(p.log_a) & (p.a == 0))),
+            }
+            if low > 0.5:
+                warnings.warn(
+                    f"{lm.patient}: posterior probability of <10% matched consensus exceeds 0.5",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
     return AlignmentResult(
         tuple(lm.patient for lm in landmarks),
         tuple(map(str, adata.var_names)),

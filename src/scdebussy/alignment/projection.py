@@ -6,6 +6,7 @@ import numpy as np
 from scipy.special import logsumexp, xlogy
 
 from .landmarks import validate_adata
+from .local_warp_posterior import LocalWarpPosterior
 from .types import ProjectionResult
 
 
@@ -60,7 +61,11 @@ def project(result, adata=None) -> ProjectionResult:
     reversals = {}
     for lm, posterior in zip(result.landmarks, result.posteriors, strict=True):
         rows = np.flatnonzero(patients == lm.patient)
-        log_m = logsumexp(posterior.log_a, axis=1)
+        log_m = (
+            np.where(posterior.patient_occupancy > 0, np.log(posterior.patient_occupancy), -np.inf)
+            if isinstance(posterior, LocalWarpPosterior)
+            else logsumexp(posterior.log_a, axis=1)
+        )
         valid_landmarks = np.isfinite(log_m)
         position_given_landmark = np.zeros_like(posterior.log_a)
         position_given_landmark[valid_landmarks] = np.exp(
@@ -125,8 +130,16 @@ def summarize(result, projection=None) -> PatientQuantities:
     average, coverage = np.full(n, np.nan), np.zeros(n)
     v = result.consensus_coordinates
     for p, (lm, post) in enumerate(zip(result.landmarks, result.posteriors, strict=True)):
-        log_m = logsumexp(post.log_a, axis=1)
-        log_n = logsumexp(post.log_a, axis=0)
+        log_m = (
+            np.where(post.patient_occupancy > 0, np.log(post.patient_occupancy), -np.inf)
+            if isinstance(post, LocalWarpPosterior)
+            else logsumexp(post.log_a, axis=1)
+        )
+        log_n = (
+            np.where(post.consensus_occupancy > 0, np.log(post.consensus_occupancy), -np.inf)
+            if isinstance(post, LocalWarpPosterior)
+            else logsumexp(post.log_a, axis=0)
+        )
         mass[p], support[p] = np.exp(log_m), np.exp(log_n)
         rows = np.isfinite(log_m)
         kinetic[p][rows] = np.exp(post.log_a[rows] - log_m[rows, None]) @ v - lm.coordinates[rows]
@@ -147,7 +160,9 @@ def summarize(result, projection=None) -> PatientQuantities:
             if np.isfinite(logsumexp(log_weights)):
                 average[p] = np.exp(log_weights - logsumexp(log_weights)) @ kinetic[p][rows]
             matched[p] = np.exp(log_n - logsumexp(log_n))
-        cols = np.isfinite(log_n)
+        cols = (
+            np.isfinite(logsumexp(post.log_a, axis=0)) if isinstance(post, LocalWarpPosterior) else np.isfinite(log_n)
+        )
         residual[p, cols] = np.exp(post.log_a[:, cols] - log_n[None, cols]).T @ lm.expression - result.barycenter[cols]
         ix = np.flatnonzero(projection.patients == lm.patient)
         if len(ix):
