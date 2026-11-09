@@ -1,0 +1,21 @@
+{
+  "historical_convergence_bridge.py": "73dc88f9704456eb20cdf1aae96584c9721d215be3c4c86225a17645e12a59f8",
+  "_data_prep.py": "95e991ebf6cb2a211d7a648cd9b9c5300c6b6ca9e9aff2de3240c7f7cec5b8ff",
+  "__init__.py": "641a49c7d0217481b4164d62709051ddc875f3c086390dce513e89b060ff8e98",
+  "_synthetic_dataset.py": "d1b58275e67a3118639f3982f1dc751bcf229228a35655481bce6fb2f8a47300",
+  "backend.py": "7d1a0582c5cb556445d66800b387a387c8785617d8f8ec71143469914b7c34d9",
+  "historical_convergence_core.py": "4f39bbccc612b090c88857def1428aad4bdd2b694b3cede5198ae41db777ad63",
+  "select_trajectory_genes.py": "0d1c05426a518e303f39dc6631cb17331ff181bbe3b3c5af07391b81d376697b",
+  "historical_ood_bridge.py": "1ae17365745821892f942fe241cbcd28f7001eab625a35e5fc7652329483c2a7",
+  "source/src/scdebussy/__init__.py": "2d73080a7a98b4063dcad353c6967d940b50c3ea901618e047da6430149fe7d5",
+  "source/src/scdebussy/align/_api.py": "61737295d86ae0fe150483fd108baa81b7b892a114859bb459307e064348a995",
+  "source/src/scdebussy/align/_compare.py": "1d694b6fa4ec2bbcf3a06b40f4d8116e864580369ff2a3c1a4db9a77dadc17ee",
+  "source/src/scdebussy/align/_landmarks.py": "efd88abad5125eb1bed8fccb2f3395c8773ea349799c3974f1739f8f40788668",
+  "source/src/scdebussy/align/_dp.py": "418feb0330b44f95aef4ef16084374f3f92b8f2bbd6fe2c6535812f04eb2e792",
+  "source/src/scdebussy/align/_barycenter.py": "d66f8c9ae80db8f6b848966610b44d2f920559aaf33d8abdb932e568ecc76e0e",
+  "source/src/scdebussy/align/_project.py": "9dc3607ccd5e68afb1e770f8157b3af1e7456d5d5a1904a59f400e02197741f3",
+  "source/src/scdebussy/align/_simulate.py": "71d2e3c6b92197d858315963494b56712df54a25567729a0e0bbf257306370b1",
+  "source/src/scdebussy/align/_model.py": "a6bb218d57148afc9c0e303c4a392897bf3e5a48d2de194e73d366b5c335b3a3",
+  "source/src/scdebussy/align/_types.py": "a6fc89e1b03bd83ceb601791598c6bdbf613f868f15d88b87ff480f1c6b7d0db",
+  "source/src/scdebussy/align/__init__.py": "fade40d83c17e59d090792598017af302d8710c3334317133636a4c40057f74d"
+}

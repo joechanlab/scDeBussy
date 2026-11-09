@@ -1,0 +1,261 @@
+[
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "src/scdebussy/align/__init__.py",
+    "sha256": "fade40d83c17e59d090792598017af302d8710c3334317133636a4c40057f74d",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "src/scdebussy/align/_api.py",
+    "sha256": "61737295d86ae0fe150483fd108baa81b7b892a114859bb459307e064348a995",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "src/scdebussy/align/_barycenter.py",
+    "sha256": "d66f8c9ae80db8f6b848966610b44d2f920559aaf33d8abdb932e568ecc76e0e",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "src/scdebussy/align/_compare.py",
+    "sha256": "1d694b6fa4ec2bbcf3a06b40f4d8116e864580369ff2a3c1a4db9a77dadc17ee",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "src/scdebussy/align/_dp.py",
+    "sha256": "418feb0330b44f95aef4ef16084374f3f92b8f2bbd6fe2c6535812f04eb2e792",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "src/scdebussy/align/_landmarks.py",
+    "sha256": "efd88abad5125eb1bed8fccb2f3395c8773ea349799c3974f1739f8f40788668",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "src/scdebussy/align/_model.py",
+    "sha256": "a6bb218d57148afc9c0e303c4a392897bf3e5a48d2de194e73d366b5c335b3a3",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "src/scdebussy/align/_project.py",
+    "sha256": "9dc3607ccd5e68afb1e770f8157b3af1e7456d5d5a1904a59f400e02197741f3",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "src/scdebussy/align/_simulate.py",
+    "sha256": "71d2e3c6b92197d858315963494b56712df54a25567729a0e0bbf257306370b1",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "src/scdebussy/align/_types.py",
+    "sha256": "a6fc89e1b03bd83ceb601791598c6bdbf613f868f15d88b87ff480f1c6b7d0db",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "src/scdebussy/__init__.py",
+    "sha256": "2d73080a7a98b4063dcad353c6967d940b50c3ea901618e047da6430149fe7d5",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "validation/v21/experiment_round/eight_patient/ru1303_ru581_pairwise/slope_regularization.py",
+    "sha256": "c415bd5e14634445085197d6a8dd0fd871ec7689e2fe07021b908a8cc2d7853a",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "validation/v21/experiment_round/eight_patient/ru1303_ru581_pairwise/three_patient_joint.py",
+    "sha256": "f0598d6c4d7c33a993a3f8e5b3d850bfb513181671347851f54cfb6be3e8abbe",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "validation/v21/experiment_round/eight_patient/ru1303_ru581_pairwise/run_pairwise.py",
+    "sha256": "e55f1a938c7dadba4b130d60d543ee2282b0924976e0db88971f1fc009b11e1d",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "validation/v21/experiment_round/eight_patient/ru1303_ru581_pairwise/barycenter_smoothing.py",
+    "sha256": "01ded497de293ad9099f6d985362996d20ac860ef0af54ec36de30cea76a5c09",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "validation/v21/experiment_round/eight_patient/joint_barycenter/eight_patient_joint.py",
+    "sha256": "64761ca7a2cde27bd6c2651731e2fcaa6ccbe559c4f5d3a0ecda3fabeb08b239",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-htan-realdata-leaderboard",
+    "commit": "8129e9b8a07d9308a9821617c4088e16df551782",
+    "path": "05_HTAN/experiments/htan_alignment_leaderboard/historical_ood_bridge.py",
+    "sha256": "71aaf7f2382821fa89a5a93799f53b04e266039a37007da1df3ef539f5df78c0",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/historical_convergence_core.py",
+    "sha256": "4f39bbccc612b090c88857def1428aad4bdd2b694b3cede5198ae41db777ad63",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/historical_convergence_bridge.py",
+    "sha256": "568553d1380f7881a9bc42df812468e04c213a2cb68b9c040a2bd2fde4e859bb",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/sim_v2_baseline.py",
+    "sha256": "e5611710d917ffcafc7d495f20cd0dc809c533a356bdd44e7f2c2a718cbdf85f",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/sim_v2_data.py",
+    "sha256": "a6ff78108f9fcaf80b1001792effbe3cc863a82906aec9aa04b2d479b978cf73",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/sim_v2_explore.py",
+    "sha256": "d589693805495951be0c2d9bea8338690d3c2760db815e85292989b2981d13d3",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/sim_v2_external_aligners.py",
+    "sha256": "b76b35db8ceafdc94c5d450a3eb432403ae0ae2f16766bea6d6bcc81dc96b6ea",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/sim_v2_gene_robustness.py",
+    "sha256": "4b414294b290a6f066ea72c6dc99c885abe35cddf655afc9350049f5111d301f",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/sim_v2_gene_selection.py",
+    "sha256": "02f1685676da86c9d1c37666dcf1a6d77ffa2b12fb82d6166693643dbf752a1e",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/sim_v2_refine.py",
+    "sha256": "e7561665750adb9a505d8741bac42e17088948bf26db084ddb58a08973a8888b",
+    "working_tree_identical": false
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/sim_v2_refine_score.py",
+    "sha256": "2e5b2fd076ed8538d5bce3262e3a6f12be24cdbec29061cd761483876fed9555",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/sim_v2_scdebussy.py",
+    "sha256": "7b63cab5cd82f3b002f3914325a4dbbd0aaa45ab9789faf6cd91d6a6323662ab",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/sim_v2_scdebussy_ablation.py",
+    "sha256": "d3ab0bce27355e56b9b0a8185f74a4a29f0d78932243129e2d6b41b39132b18e",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/sim_v2_scenarios.py",
+    "sha256": "28b648d9767d2f635429987bdcbfda63e3df8f0424cf48bae2ad9a88a7128c24",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/sim_v2_span_anchor.py",
+    "sha256": "cf15faf64a9ac9bb5faf213dfad686ba733fc5cdb68acf386a1d4ca7fca1eef2",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/sim_v2_span_pooled.py",
+    "sha256": "01419be469211fc07ab5e52a49ca6e676757d4d44cfa6dcbda12a52d3693fc5f",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/sim_v2_span_prior.py",
+    "sha256": "2c9020f2b122ba9e0f05af08b65f6fb5110aed1761d833fbca4e10da00307aba",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "paper-sim-v2",
+    "commit": "41596d8e937116b237fd3e5eb59e1f856659005c",
+    "path": "01_simulation/sim_v2_span_sync.py",
+    "sha256": "b3b1cbb7510efbd45490a23d116ba96b9182b1ca7706276023f1a58d354f227c",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "scDeBussy",
+    "commit": "0f5ca0c8e8b12ccfd5d88c46cd7432be34bff005",
+    "path": "src/scdebussy/tl/_synthetic_dataset.py",
+    "sha256": "d1b58275e67a3118639f3982f1dc751bcf229228a35655481bce6fb2f8a47300",
+    "working_tree_identical": true
+  },
+  {
+    "repo": "scDeBussy",
+    "commit": "0f5ca0c8e8b12ccfd5d88c46cd7432be34bff005",
+    "path": "src/scdebussy/tl/_data_prep.py",
+    "sha256": "95e991ebf6cb2a211d7a648cd9b9c5300c6b6ca9e9aff2de3240c7f7cec5b8ff",
+    "working_tree_identical": false
+  },
+  {
+    "repo": "htan-continuous-price",
+    "commit": "0f920137b9b7e30c5127a6afe7c4ee31fd950821",
+    "path": "validation/v21/experiment_round/select_trajectory_genes.py",
+    "sha256": "0d1c05426a518e303f39dc6631cb17331ff181bbe3b3c5af07391b81d376697b",
+    "working_tree_identical": true
+  }
+]
