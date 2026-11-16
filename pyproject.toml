@@ -22,6 +22,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3.15",
 ]
 dependencies = [
   "anndata",
@@ -67,8 +68,8 @@ envs.default.installer = "uv"
 envs.default.features = [ "dev" ]
 envs.docs.features = [ "doc" ]
 envs.docs.scripts.build = "sphinx-build -M html docs docs/_build {args}"
-envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
+envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.hatch-test.features = [ "test" ]
 
 [tool.ruff]
@@ -111,16 +112,16 @@ lint.pydocstyle.convention = "numpy"
 
 [tool.pytest]
 ini_options.testpaths = [ "tests" ]
-ini_options.xfail_strict = true
 ini_options.addopts = [
   "--import-mode=importlib", # allow using test files with same name
 ]
+ini_options.xfail_strict = true
 
 [tool.coverage]
+run.source = [ "scdebussy" ]
 run.omit = [
   "**/test_*.py",
 ]
-run.source = [ "scdebussy" ]
 
 [tool.cruft]
 skip = [

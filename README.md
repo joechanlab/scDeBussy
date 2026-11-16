@@ -10,8 +10,8 @@ scDeBussy is a Python package for dynamic time warping (DTW)-based pseudotime al
 
 ## Features
 
-* Implements DTW with barycenter averaging for trajectory alignment
-* Downstream analysis with visualization capabilities
+- Implements DTW with barycenter averaging for trajectory alignment
+- Downstream analysis with visualization capabilities
 
 ## Getting started
 
